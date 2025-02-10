@@ -3,14 +3,19 @@ const multer = require('multer');
 const axios = require('axios');
 const fs = require('fs');
 const FormData = require('form-data');
+const path = require('path');
 
 const app = express();
 const upload = multer({ dest: 'uploads/' });
 const PORT = process.env.PORT || 3001;
 
-app.use(express.static('public'));
+app.use(express.static('public', {
+    setHeaders: (res, filePath) => {
+        console.log('Serving static file:', filePath);
+    }
+}));
 
-app.post('/generate', upload.single('referenceAudio'), async (req, res) => {
+app.post('/generate-audio', upload.single('ref_audio'), async (req, res) => {
     try {
         console.log('🔵 File:', req.file);
         console.log('🔵 Body:', req.body);
@@ -31,6 +36,11 @@ app.post('/generate', upload.single('referenceAudio'), async (req, res) => {
         });
         formData.append('ref_text', req.body.ref_text);
         formData.append('gen_text', req.body.gen_text);
+
+        // Optional parameters with defaults
+        formData.append('remove_silence', req.body.remove_silence || 'false');
+        formData.append('cross_fade_duration', req.body.cross_fade_duration || '0.15');
+        formData.append('speed', req.body.speed || '1.0');
 
         console.log("🔵 Sending request to FastAPI...");
 
@@ -56,11 +66,18 @@ app.post('/generate', upload.single('referenceAudio'), async (req, res) => {
         if (error.response) {
             console.error('🔴 Response data:', error.response.data);
             console.error('🔴 Response status:', error.response.status);
+            
+            // Send more detailed error response
+            res.status(error.response.status).json({ 
+                error: 'Failed to generate audio',
+                details: error.response.data
+            });
+        } else {
+            res.status(500).json({ 
+                error: 'Failed to generate audio',
+                details: error.message
+            });
         }
-        res.status(500).json({ 
-            error: 'Failed to generate audio',
-            details: error.message
-        });
     } finally {
         // Clean up uploaded file
         if (req.file) {
