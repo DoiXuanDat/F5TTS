@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Text-to-Speech Generator</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; }
+        form > div { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; }
+        textarea { width: 100%; height: 100px; }
+        input[type="file"] { width: 100%; }
+        .error { color: red; margin-top: 10px; }
+        .loading { display: none; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <h1>Text-to-Speech Generator</h1>
+    <form id="ttsForm">
+        <div>
+            <label for="ref_text">Reference Text:</label>
+            <input type="text" id="ref_text" name="ref_text" required>
+        </div>
+        
+        <div>
+            <label for="gen_text">Generation Text:</label>
+            <input type="text" id="gen_text" name="gen_text" required>
+        </div>
+        
+        <div>
+            <label for="referenceAudio">Upload Audio File (WAV format):</label>
+            <input type="file" id="referenceAudio" name="referenceAudio" accept="audio/wav" required>
+        </div>
+        
+        <button type="submit">Generate</button>
+    </form>
+    
+    <div id="loading" class="loading">Generating audio...</div>
+    <div id="error" class="error"></div>
+    <audio id="generatedAudio" controls style="display:none; margin-top: 20px; width: 100%;"></audio>
+
+    <script>
+        document.getElementById('ttsForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const form = e.target;
+            const formData = new FormData(form);
+            const loadingDiv = document.getElementById('loading');
+            const errorDiv = document.getElementById('error');
+            const audioElement = document.getElementById('generatedAudio');
+            
+            // Reset UI
+            errorDiv.textContent = '';
+            audioElement.style.display = 'none';
+            loadingDiv.style.display = 'block';
+            
+            try {
+                const response = await fetch('/generate', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to generate audio');
+                }
+
+                const audioBlob = await response.blob();
+                const audioUrl = URL.createObjectURL(audioBlob);
+                
+                audioElement.src = audioUrl;
+                audioElement.style.display = 'block';
+            } catch (error) {
+                console.error('Error:', error);
+                errorDiv.textContent = error.message;
+            } finally {
+                loadingDiv.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>

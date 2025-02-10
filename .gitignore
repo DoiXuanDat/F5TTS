@@ -1,0 +1,50 @@
+# Node.js
+node_modules/
+npm-debug.log
+package-lock.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+f5_tts
+
+
+# Virtual Environment
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+uploads/*
+!uploads/.gitkeep
+generated_audio_files/*
+!generated_audio_files/.gitkeep
+tts_voice_files/*
+!tts_voice_files/.gitkeep
