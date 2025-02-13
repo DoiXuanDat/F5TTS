@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Text-to-Speech Generator</title>
+    <title>Advanced Text-to-Speech Generator</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="container">
-        <h1>Text-to-Speech Generator</h1>
+        <h1>Advanced Text-to-Speech Generator</h1>
         <form id="ttsForm">
             <div class="form-group">
                 <label for="ref_text">Reference Text:</label>
@@ -25,35 +25,52 @@
                 <input type="file" id="referenceAudio" name="ref_audio" accept="audio/wav" required>
             </div>
             
-            <div class="form-group">
-                <label for="removeSilence">Remove Silence:</label>
-                <select id="removeSilence" name="remove_silence">
-                    <option value="false">No</option>
-                    <option value="true">Yes</option>
-                </select>
+            <div class="form-group parameters">
+                <div class="parameter">
+                    <label for="removeSilence">Remove Silence:</label>
+                    <select id="removeSilence" name="remove_silence">
+                        <option value="false">No</option>
+                        <option value="true">Yes</option>
+                    </select>
+                </div>
+                
+                <div class="parameter">
+                    <label for="crossFadeDuration">Cross Fade Duration (s):</label>
+                    <input type="number" id="crossFadeDuration" name="cross_fade_duration" 
+                           step="0.01" min="0" value="0.15">
+                </div>
+                
+                <div class="parameter">
+                    <label for="speed">Speech Speed:</label>
+                    <input type="number" id="speed" name="speed" 
+                           step="0.1" min="0.1" max="2.0" value="1.0">
+                </div>
             </div>
             
-            <div class="form-group">
-                <label for="crossFadeDuration">Cross Fade Duration (seconds):</label>
-                <input type="number" id="crossFadeDuration" name="cross_fade_duration" 
-                       step="0.01" min="0" value="0.15">
-            </div>
-            
-            <div class="form-group">
-                <label for="speed">Speech Speed:</label>
-                <input type="number" id="speed" name="speed" 
-                       step="0.1" min="0.1" max="2.0" value="1.0">
-            </div>
-            
-            <button type="submit" class="btn">Generate Audio</button>
+            <button type="submit" class="btn generate-btn">Generate Audio</button>
         </form>
         
-        <div id="loading" class="loading" style="display:none;">Generating audio...</div>
+        <div id="loading" class="loading" style="display:none;">
+            <div class="spinner"></div>
+            <span>Generating audio...</span>
+        </div>
+        
         <div id="error" class="error"></div>
-        <audio id="generatedAudio" controls style="display:none;"></audio>
+        
+        <div id="result" class="result" style="display:none;">
+            <h2>Generated Audio</h2>
+            <audio id="generatedAudio" controls></audio>
+            <button id="generateSRT" class="btn srt-btn">Generate SRT File</button>
+            <div id="srtLoading" class="loading" style="display:none;">
+                <div class="spinner"></div>
+                <span>Generating SRT file...</span>
+            </div>
+        </div>
     </div>
 
     <script>
+        let currentAudioPath = null;
+
         document.getElementById('ttsForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
@@ -61,12 +78,13 @@
             const formData = new FormData(form);
             const loadingDiv = document.getElementById('loading');
             const errorDiv = document.getElementById('error');
+            const resultDiv = document.getElementById('result');
             const audioElement = document.getElementById('generatedAudio');
             
             // Reset UI
             errorDiv.textContent = '';
-            audioElement.style.display = 'none';
-            loadingDiv.style.display = 'block';
+            resultDiv.style.display = 'none';
+            loadingDiv.style.display = 'flex';
             
             try {
                 const response = await fetch('/generate-audio', {
@@ -79,16 +97,75 @@
                     throw new Error(errorData.detail || 'Failed to generate audio');
                 }
 
-                const audioBlob = await response.blob();
-                const audioUrl = URL.createObjectURL(audioBlob);
+                const data = await response.json();
                 
-                audioElement.src = audioUrl;
-                audioElement.style.display = 'block';
+                if (!data.filename) {
+                    throw new Error('Invalid response from server: missing filename');
+                }
+
+                // Store the full path for SRT generation
+                currentAudioPath = data.full_path;
+                
+                // Set audio source using the filename
+                audioElement.src = `/generated_audio_files/${data.filename}`;
+                resultDiv.style.display = 'block';
+                
+                console.log('Generation successful:', data);
             } catch (error) {
                 console.error('Error:', error);
                 errorDiv.textContent = error.message;
             } finally {
                 loadingDiv.style.display = 'none';
+            }
+        });
+
+        document.getElementById('generateSRT').addEventListener('click', async () => {
+            if (!currentAudioPath) {
+                document.getElementById('error').textContent = 'No audio file available for transcription';
+                return;
+            }
+            
+            const srtLoadingDiv = document.getElementById('srtLoading');
+            const errorDiv = document.getElementById('error');
+            
+            srtLoadingDiv.style.display = 'flex';
+            errorDiv.textContent = '';
+            
+            try {
+                const response = await fetch('/generate-srt', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ audioPath: currentAudioPath })
+                });
+
+                // First check if the response is OK
+                if (!response.ok) {
+                    // If it's an error response, try to parse it as JSON
+                    const errorData = await response.json();
+                    throw new Error(errorData.details || errorData.error || 'Failed to generate SRT file');
+                }
+
+                // If response is OK, get the blob
+                const blob = await response.blob();
+                
+                // Create download link
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'generated.srt';
+                document.body.appendChild(a);
+                a.click();
+                
+                // Cleanup
+                window.URL.revokeObjectURL(url);
+                a.remove();
+            } catch (error) {
+                console.error('Error:', error);
+                errorDiv.textContent = error.message;
+            } finally {
+                srtLoadingDiv.style.display = 'none';
             }
         });
     </script>
