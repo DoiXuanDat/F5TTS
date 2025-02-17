@@ -15,10 +15,27 @@
                 <input type="text" id="ref_text" name="ref_text" required placeholder="Enter reference text">
             </div>
             
-            <div class="form-group">
-                <label for="gen_text">Generation Text:</label>
-                <input type="text" id="gen_text" name="gen_text" required placeholder="Enter text to generate">
+            <div class="timing-controls">
+                <button type="button" id="showTimingInfo" class="btn">Show Timing Info</button>
+                <span id="totalDuration">Total Duration: --</span>
             </div>
+            
+            <div id="textSegmentsContainer" class="text-segments">
+                <div class="segment-group">
+                    <div class="segment-header">
+                        <h3>Text Segment 1</h3>
+                        <button type="button" class="btn remove-segment" style="display: none;">Remove</button>
+                    </div>
+                    <textarea class="gen-text-segment" required placeholder="Enter text to generate"></textarea>
+                    <div class="timing-info" style="display: none;">
+                        <span class="duration">Duration: --</span>
+                        <span class="start-time">Start: --</span>
+                        <span class="end-time">End: --</span>
+                    </div>
+                </div>
+            </div>
+            
+            <button type="button" class="btn add-segment-btn">Add Another Segment</button>
             
             <div class="form-group">
                 <label for="referenceAudio">Upload Audio File (WAV format):</label>
@@ -52,122 +69,25 @@
         
         <div id="loading" class="loading" style="display:none;">
             <div class="spinner"></div>
-            <span>Generating audio...</span>
+            <span>Processing segments...</span>
+            <div id="progressInfo" class="progress-info"></div>
         </div>
         
         <div id="error" class="error"></div>
         
         <div id="result" class="result" style="display:none;">
             <h2>Generated Audio</h2>
-            <audio id="generatedAudio" controls></audio>
-            <button id="generateSRT" class="btn srt-btn">Generate SRT File</button>
-            <div id="srtLoading" class="loading" style="display:none;">
-                <div class="spinner"></div>
-                <span>Generating SRT file...</span>
+            <div id="segmentResults"></div>
+            <div class="combined-audio">
+                <h3>Combined Audio</h3>
+                <audio id="finalAudio" controls></audio>
+            </div>
+            <div class="srt-controls">
+                <button id="downloadCombinedSRT" class="btn srt-btn">Download Combined SRT</button>
             </div>
         </div>
     </div>
 
-    <script>
-        let currentAudioPath = null;
-
-        document.getElementById('ttsForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            const form = e.target;
-            const formData = new FormData(form);
-            const loadingDiv = document.getElementById('loading');
-            const errorDiv = document.getElementById('error');
-            const resultDiv = document.getElementById('result');
-            const audioElement = document.getElementById('generatedAudio');
-            
-            // Reset UI
-            errorDiv.textContent = '';
-            resultDiv.style.display = 'none';
-            loadingDiv.style.display = 'flex';
-            
-            try {
-                const response = await fetch('/generate-audio', {
-                    method: 'POST',
-                    body: formData
-                });
-
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.detail || 'Failed to generate audio');
-                }
-
-                const data = await response.json();
-                
-                if (!data.filename) {
-                    throw new Error('Invalid response from server: missing filename');
-                }
-
-                // Store the full path for SRT generation
-                currentAudioPath = data.full_path;
-                
-                // Set audio source using the filename
-                audioElement.src = `/generated_audio_files/${data.filename}`;
-                resultDiv.style.display = 'block';
-                
-                console.log('Generation successful:', data);
-            } catch (error) {
-                console.error('Error:', error);
-                errorDiv.textContent = error.message;
-            } finally {
-                loadingDiv.style.display = 'none';
-            }
-        });
-
-        document.getElementById('generateSRT').addEventListener('click', async () => {
-            if (!currentAudioPath) {
-                document.getElementById('error').textContent = 'No audio file available for transcription';
-                return;
-            }
-            
-            const srtLoadingDiv = document.getElementById('srtLoading');
-            const errorDiv = document.getElementById('error');
-            
-            srtLoadingDiv.style.display = 'flex';
-            errorDiv.textContent = '';
-            
-            try {
-                const response = await fetch('/generate-srt', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ audioPath: currentAudioPath })
-                });
-
-                // First check if the response is OK
-                if (!response.ok) {
-                    // If it's an error response, try to parse it as JSON
-                    const errorData = await response.json();
-                    throw new Error(errorData.details || errorData.error || 'Failed to generate SRT file');
-                }
-
-                // If response is OK, get the blob
-                const blob = await response.blob();
-                
-                // Create download link
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'generated.srt';
-                document.body.appendChild(a);
-                a.click();
-                
-                // Cleanup
-                window.URL.revokeObjectURL(url);
-                a.remove();
-            } catch (error) {
-                console.error('Error:', error);
-                errorDiv.textContent = error.message;
-            } finally {
-                srtLoadingDiv.style.display = 'none';
-            }
-        });
-    </script>
+    <script src="client.js"></script>
 </body>
 </html>

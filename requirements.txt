@@ -1,7 +1,6 @@
 fastapi
 uvicorn
 
-
 accelerate>=0.33.0
 bitsandbytes==0.44.1
 cached_path
