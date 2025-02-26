@@ -88,6 +88,8 @@ function toggleTimingInfo() {
         isVisible ? 'Show Timing Info' : 'Hide Timing Info';
 }
 
+// client.js - Simplified handleFormSubmit function without timeouts
+
 async function handleFormSubmit(e) {
     e.preventDefault();
     
@@ -123,8 +125,7 @@ async function handleFormSubmit(e) {
             });
             
             if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(`Failed to generate segment ${i + 1}: ${errorData.detail || 'Unknown error'}`);
+                throw new Error(`Server error: ${response.status}`);
             }
             
             const data = await response.json();
@@ -210,7 +211,7 @@ async function downloadCombinedSRT() {
         // Auto-hide error after 5 seconds
         setTimeout(() => {
             errorDiv.style.display = 'none';
-        }, 5000);
+        }, 10000000);
     }
 }
 

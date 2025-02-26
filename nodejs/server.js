@@ -21,8 +21,9 @@ const validateAudioDuration = async (filePath) => {
     try {
         const duration = await getAudioDurationInSeconds(filePath);
         console.log(`Audio duration: ${duration} seconds`);
-        // Cho phép các file có độ dài từ 0.1s đến 5 phút
-        return duration >= 0.1 && duration <= 300;
+        // Remove upper limit on duration, only check for minimum length
+        // Allow any file longer than 0.1 seconds
+        return duration >= 0.1;
     } catch (error) {
         console.error('Error validating audio duration:', error);
         return false;
@@ -74,15 +75,16 @@ app.post('/generate-audio', upload.single('ref_audio'), async (req, res) => {
             'http://localhost:8000/generate-audio/',
             formData,
             { 
-                headers: { ...formData.getHeaders() },
-                timeout: 300000 // 5 minute timeout
+                headers: { ...formData.getHeaders() }
             }
         );
 
-        // Validate generated audio
+        // Validate generated audio - add more detailed error logging
         const isValidDuration = await validateAudioDuration(response.data.full_path);
         if (!isValidDuration) {
-            throw new Error('Generated audio duration is invalid or file is corrupted');
+            const duration = await getAudioDurationInSeconds(response.data.full_path);
+            console.error(`Invalid audio duration: ${duration} seconds`);
+            throw new Error(`Generated audio validation failed. Duration: ${duration} seconds`);
         }
 
         // Add timing information
@@ -133,7 +135,7 @@ app.post('/combine-audio', async (req, res) => {
             paths,
             { 
                 headers: { 'Content-Type': 'application/json' },
-                timeout: 300000
+                timeout: 300000000
             }
         );
 
@@ -171,7 +173,7 @@ app.post('/generate-srt', async (req, res) => {
             {
                 headers: { ...formData.getHeaders() },
                 responseType: 'arraybuffer',
-                timeout: 60000
+                timeout: 600000000
             }
         );
 
@@ -216,7 +218,7 @@ app.post('/generate-combined-srt', async (req, res) => {
             {
                 headers: { 'Content-Type': 'application/json' },
                 responseType: 'arraybuffer',
-                timeout: 120000
+                timeout: 1200000000
             }
         );
 
@@ -260,7 +262,7 @@ app.post('/generate-all-srt', async (req, res) => {
                     {
                         headers: { ...formData.getHeaders() },
                         responseType: 'arraybuffer',
-                        timeout: 60000
+                        timeout: 600000000
                     }
                 );
 
