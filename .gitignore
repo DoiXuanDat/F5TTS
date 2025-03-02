@@ -47,6 +47,7 @@ uploads/*
 !tts_voice_files/.gitkeep
 generated_audio_files
 tts_voice_files
+*.wav
 
 /node_modules
 /.pnp
