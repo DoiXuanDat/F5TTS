@@ -24,8 +24,6 @@ var/
 *.egg-info/
 .installed.cfg
 *.egg
-f5_tts
-
 
 # Virtual Environment
 venv/
@@ -42,9 +40,31 @@ ENV/
 Thumbs.db
 
 # Project specific
+f5_tts
 uploads/*
 !uploads/.gitkeep
-generated_audio_files/*
 !generated_audio_files/.gitkeep
-tts_voice_files/*
 !tts_voice_files/.gitkeep
+generated_audio_files
+tts_voice_files
+
+/node_modules
+/.pnp
+.pnp.js
+
+# testing
+/coverage
+
+# production
+/build
+
+# misc
+.DS_Store
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

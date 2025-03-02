@@ -1,0 +1,176 @@
+/* styles.css */
+
+/* Container styles */
+.container {
+  margin-top: 30px;
+}
+
+/* Heading styles */
+.heading {
+  font-size: 2rem;
+  margin-bottom: 20px;
+}
+
+/* Thanh công cụ */
+.toolbar {
+  margin-bottom: 20px;
+  display: flex;
+  justify-content: center;
+}
+
+.toolbar label i:disabled {
+  color: #ccc;
+}
+
+.toolbar > hr {
+  width: 60%;
+  margin-right: 40px;
+}
+
+.toolbar label {
+  margin-right: 20px;
+}
+
+/* Paper styles */
+.paper {
+  padding: 16px;
+  margin-bottom: 16px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Preformatted text box */
+.preTextBox {
+  padding: 16px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+/* Grid container */
+.gridContainer {
+  display: flex;
+  gap: 16px;
+}
+
+/* Grid items */
+.gridItem {
+  width: 48%;
+}
+
+/* Button styles */
+.buttonContainer {
+  margin-top: 16px;
+  display: flex;
+  justify-content: center;
+}
+
+.button {
+  padding: 8px 16px;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+/* Textarea styles */
+.textarea {
+  width: 100%;
+  height: 250px;
+  margin-top: 16px;
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.length {
+  font-weight: bold;
+}
+
+.formRegex {
+  display: flex;
+  margin-top: 20px;
+  align-items: center;
+}
+
+.deleteSpecialChars {
+  display: flex;
+  margin-top: 10px;
+  margin-bottom: 20px;
+}
+
+.regexInput {
+  width: 40%;
+  height: 40px;
+  margin: 0 10px 0 20px;
+  border: 1px solid #ccc;
+  border-radius: 10px;
+}
+
+.deleteSpecialCharsInput {
+  width: 15%;
+  height: 40px;
+  margin: 0 10px;
+  border: 1px solid #ccc;
+  border-radius: 10px;
+}
+
+.slide-in-right {
+  animation: slide-in-right 0.3s forwards;
+}
+
+.slide-out-left {
+  animation: slide-out-left 0.3s forwards;
+}
+
+.slide-in-left {
+  animation: slide-in-left 0.3s forwards;
+}
+
+.slide-out-right {
+  animation: slide-out-right 0.3s forwards;
+}
+
+@keyframes slide-in-right {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slide-out-left {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+}
+
+@keyframes slide-in-left {
+  from {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slide-out-right {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}

@@ -6,13 +6,14 @@ import soundfile as sf
 import torchaudio
 from cached_path import cached_path
 from num2words import num2words
-from fastapi import FastAPI, File, UploadFile, HTTPException, Form
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form, Body
+from fastapi.responses import FileResponse, Response
 from datetime import timedelta
 import os
 from pydub import AudioSegment
 import json
 from typing import List
+from pydantic import BaseModel
 
 from f5_tts.model import DiT
 from f5_tts.infer.utils_infer import (
@@ -34,6 +35,20 @@ logger = logging.getLogger(__name__)
 
 # FastAPI initialization
 app = FastAPI()
+
+# Add CORS middleware
+from fastapi.middleware.cors import CORSMiddleware
+
+app = FastAPI()
+
+# Add CORS middleware configuration
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],  # Frontend URL
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Check if GPU decorator is available
 try:
@@ -157,7 +172,7 @@ def translate_number_to_text(text):
     return re.sub(r'\b\d+\b', replace_number, text_separated)
 
 @gpu_decorator
-def infer(ref_audio_orig, ref_text, gen_text, remove_silence=False, cross_fade_duration=0.15, speed=1.0, nfe_step=32):
+def infer(ref_audio_orig, ref_text, gen_text, remove_silence=False, cross_fade_duration=0.15, speed=1.0, nfe_step=8):
     """Generate audio using F5-TTS model"""
     logger.info("Starting text preprocessing...")
     gen_text = gen_text.lower()
@@ -327,61 +342,105 @@ async def combine_audio_segments(file_paths: List[str]):
         raise HTTPException(status_code=500, detail=str(e))
     
 
-@app.post("/generate-combined-srt/")
-async def generate_combined_srt(file_paths: List[str]):
-    """Generate combined SRT file from multiple audio segments"""
+class SRTRequest(BaseModel):
+    audio_paths: List[str]
+
+@app.post("/generate-combined-srt")
+async def generate_combined_srt(request: SRTRequest):
     try:
-        logger.info(f"Starting combined SRT generation for {len(file_paths)} files")
+        logger.info(f"Received request with paths: {request.audio_paths}")
         
-        # Validate input paths
-        for path in file_paths:
+        # Validate paths exist
+        for path in request.audio_paths:
             if not os.path.exists(path):
-                raise HTTPException(status_code=404, detail=f"Audio file not found: {path}")
+                logger.error(f"Audio file not found: {path}")
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Audio file not found: {path}"
+                )
         
-        srt_segments = []
+        # Tính thời lượng thực tế của từng file âm thanh
         current_time = 0.0
-        gap_duration = 0.1  # 100ms gap between segments
+        srt_entries = []
         
-        for i, audio_path in enumerate(file_paths):
-            # Get audio duration
-            duration = get_audio_duration(audio_path)
+        for i, path in enumerate(request.audio_paths):
+            # Lấy thời lượng âm thanh
+            audio = AudioSegment.from_wav(path)
+            duration = len(audio) / 1000.0  # Chuyển đổi sang giây
             
-            # Get original text from metadata file
-            metadata_path = audio_path.rsplit(".", 1)[0] + ".json"
-            original_text = ""
+            # Lấy metadata cho phân đoạn này
+            metadata_path = path.rsplit(".", 1)[0] + ".json"
             if os.path.exists(metadata_path):
                 with open(metadata_path, "r", encoding="utf-8") as f:
                     metadata = json.load(f)
-                    original_text = metadata.get("original_text", "")
+                segment_text = metadata.get("original_text", f"Text segment {i+1}")
+            else:
+                segment_text = f"Text segment {i+1}"
             
-            # Add segment to SRT content
-            srt_segments.extend([
-                str(i + 1),  # Segment number
-                f"{format_timestamp(current_time)} --> {format_timestamp(current_time + duration)}",
-                original_text.strip(),
-                ""  # Empty line between segments
+            # Thêm một mục SRT cho phân đoạn này
+            srt_entries.append({
+                "index": i + 1,
+                "start_time": format_timestamp(current_time),
+                "end_time": format_timestamp(current_time + duration),
+                "text": segment_text.strip()
+            })
+            
+            # Cập nhật thời gian hiện tại
+            current_time += duration
+        
+        # Tạo nội dung SRT
+        srt_content = []
+        for entry in srt_entries:
+            srt_content.extend([
+                str(entry["index"]),
+                f"{entry['start_time']} --> {entry['end_time']}",
+                entry["text"],
+                ""  # Dòng trống giữa các mục
             ])
-            
-            # Update timing for next segment
-            current_time += duration + gap_duration
         
-        # Generate output path
-        output_dir = "/app/generated_audio_files"
-        os.makedirs(output_dir, exist_ok=True)
-        output_path = os.path.join(output_dir, f"combined_{int(time.time())}.srt")
+        srt_text = "\n".join(srt_content)
+        logger.info(f"Generated SRT content with {len(srt_entries)} entries")
         
-        # Write combined SRT
-        with open(output_path, "w", encoding="utf-8") as f:
-            f.write("\n".join(srt_segments))
-        
-        logger.info(f"Successfully generated combined SRT: {output_path}")
-        
-        return FileResponse(
-            path=output_path,
-            filename=os.path.basename(output_path),
-            media_type="application/x-subrip"
+        # Trả về văn bản SRT
+        return Response(
+            content=srt_text,
+            media_type="text/plain",
+            headers={
+                "Content-Disposition": "attachment; filename=combined.srt"
+            }
         )
-        
     except Exception as e:
-        logger.error(f"Error generating combined SRT: {str(e)}", exc_info=True)
+        logger.error(f"Error generating SRT: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+class AudioPaths(BaseModel):
+    paths: List[str]
+
+from fastapi.staticfiles import StaticFiles
+import os
+
+# Create directories if they don't exist
+AUDIO_DIR = "generated_audio_files"
+if not os.path.exists(AUDIO_DIR):
+    os.makedirs(AUDIO_DIR)
+
+# Mount static files directory
+app.mount("/audio", StaticFiles(directory=AUDIO_DIR), name="audio")
+
+@app.post("/combine-audio")
+async def combine_audio(audio_paths: AudioPaths):
+    try:
+        combined = AudioSegment.empty()
+        for path in audio_paths.paths:
+            audio = AudioSegment.from_wav(path)
+            combined += audio
+            
+        output_path = os.path.join(AUDIO_DIR, "combined_audio.wav")
+        combined.export(output_path, format="wav")
+        
+        return {
+            "status": "success", 
+            "path": f"audio/combined_audio.wav"  # Updated path
+        }
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
