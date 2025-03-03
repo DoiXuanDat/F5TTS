@@ -1,0 +1,81 @@
+.subtitle-row {
+  transition: background-color 0.2s ease;
+}
+
+.subtitle-row:hover {
+  background-color: #f8f9fa;
+}
+
+.subtitle-number {
+  width: 10%;
+  text-align: center;
+  font-weight: 500;
+}
+
+.subtitle-content {
+  width: 60%;
+}
+
+.subtitle-image {
+  width: 30%;
+  text-align: center;
+}
+
+.subtitle-textarea {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  resize: vertical;
+  min-height: 100px;
+  font-size: 14px;
+  transition: border-color 0.2s ease;
+}
+
+.subtitle-textarea:focus {
+  border-color: #80bdff;
+  outline: 0;
+  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+.subtitle-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.action-btn {
+  padding: 4px 8px;
+  border: none;
+  border-radius: 4px;
+  background-color: #f8f9fa;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.action-btn:hover {
+  background-color: #e9ecef;
+}
+
+.add-up:hover,
+.add-down:hover {
+  background-color: #28a745;
+  color: white;
+}
+
+.delete:hover {
+  background-color: #dc3545;
+  color: white;
+}
+
+.thumbnail {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.thumbnail:hover {
+  transform: scale(1.05);
+}

@@ -1,0 +1,52 @@
+.subtitle-table-container {
+  max-height: 600px;
+  overflow-y: auto;
+  margin: 2rem 0;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.subtitle-table {
+  width: 100%;
+  border-collapse: collapse;
+  background-color: white;
+}
+
+.subtitle-table th {
+  background-color: #f8f9fa;
+  padding: 1rem;
+  text-align: left;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  border-bottom: 2px solid #dee2e6;
+}
+
+.subtitle-table th:first-child {
+  width: 10%;
+}
+
+.subtitle-table th:nth-child(2) {
+  width: 60%;
+}
+
+.subtitle-table th:last-child {
+  width: 30%;
+}
+
+.subtitle-table td {
+  padding: 1rem;
+  border-bottom: 1px solid #dee2e6;
+  vertical-align: top;
+}
+
+@media (max-width: 768px) {
+  .subtitle-table-container {
+    margin: 1rem 0;
+  }
+
+  .subtitle-table th,
+  .subtitle-table td {
+    padding: 0.5rem;
+  }
+}
