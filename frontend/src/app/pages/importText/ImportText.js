@@ -1,12 +1,16 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import SubtitleEditor from "../../components/subtitle/SubtitleEditor";
 import "./ImportText.css";
 
 const ImportText = () => {
+  const navigate = useNavigate();
   const [subtitleText, setSubtitleText] = useState("");
   const [regexPath, setRegexPath] = useState("([，、.「」？；：！])");
   const [dllitems, setDllitems] = useState("⌊ ⌉");
   const [step, setStep] = useState(1);
+  const [isGenerationComplete, setIsGenerationComplete] = useState(false);
+  const [generatedData, setGeneratedData] = useState(null);
 
   const parseSrtContent = (srtContent) => {
     const regex =
@@ -81,6 +85,26 @@ const ImportText = () => {
         document.querySelector(".paper").classList.add("slide-in-left");
       }, 300);
     }
+  };
+
+  const handleGenerationComplete = (data) => {
+    setIsGenerationComplete(true);
+    setGeneratedData(data);
+  };
+
+  const handleSave = () => {
+    // Create a new video entry
+    const newVideo = {
+      id: `VID${Date.now()}`,
+      title: subtitleText.slice(0, 30) + "...", // First 30 chars as title
+      status: "completed",
+      createdAt: new Date().toISOString(),
+      url: generatedData?.audioUrl || "",
+    };
+
+    // Here you would typically save to your backend
+    // For now, we'll just navigate to the video list
+    navigate("/video-list");
   };
 
   return (
@@ -172,18 +196,27 @@ const ImportText = () => {
       {/* Subtitle Editor Step */}
       {step === 2 && (
         <div className="paper">
-          <SubtitleEditor subtitleText={subtitleText} />{" "}
-          {/* Rendering SubtitleEditor component with subtitleText */}
-          <div className="buttonContainer">
-            <button className="button btn btn-danger me-4" onClick={prevStep}>
-              Back
+          <SubtitleEditor 
+            subtitleText={subtitleText} 
+            onGenerationComplete={handleGenerationComplete}
+          />
+          <div className="buttonContainer mt-3">
+            <button 
+              className="btn btn-danger me-4" 
+              onClick={prevStep}
+            >
+              Quay lại
             </button>
-            <button className="button btn btn-success">Lưu</button>
+            <button 
+              className="btn btn-success"
+              onClick={handleSave}
+              disabled={!isGenerationComplete}
+            >
+              Lưu và tiếp tục
+            </button>
           </div>
         </div>
       )}
-
-      {/* Navigation buttons */}
     </div>
   );
 };

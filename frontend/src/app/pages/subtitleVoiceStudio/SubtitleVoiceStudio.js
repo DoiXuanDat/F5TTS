@@ -9,7 +9,6 @@ import {
   generateCombinedSRT,
 } from "../../services/api";
 import {
-  formatTime,
   createDownloadLink,
   validateAudioFile,
 } from "../../services/audioProcessing";
@@ -30,6 +29,10 @@ function SubtitleVoiceStudio() {
   const [error, setError] = useState("");
   const [finalAudioUrl, setFinalAudioUrl] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
+
+  // Add this state to track generation completion
+  const [isGenerationComplete, setIsGenerationComplete] = useState(false);
+  const [generatedData, setGeneratedData] = useState(null);
 
   const handleAddSegment = () => {
     setSegments([...segments, { text: "", duration: null }]);
@@ -186,9 +189,30 @@ function SubtitleVoiceStudio() {
     }
   };
 
+  // Add the handler for generation completion
+  const handleGenerationComplete = (data) => {
+    setIsGenerationComplete(true);
+    setGeneratedData(data);
+  };
+
+  // Update the handleSave function
   const handleSave = () => {
-    // TODO: Thêm logic lưu dữ liệu nếu cần
-    navigate("/list");
+    if (!generatedData?.audioUrl) {
+      return;
+    }
+
+    // Create a new video entry
+    const newVideo = {
+      id: `VID${Date.now()}`,
+      title: subtitleText.slice(0, 30) + "...", // First 30 chars as title
+      status: "completed",
+      createdAt: new Date().toISOString(),
+      url: generatedData.audioUrl,
+    };
+
+    // Here you would typically save to your backend
+    // For now, we'll just navigate to the video list
+    navigate("/video-list");
   };
 
   return (
@@ -249,9 +273,11 @@ function SubtitleVoiceStudio() {
       {/* Subtitle Editor Step */}
       {step === 2 && (
         <div className="paper">
-          <SubtitleEditor
-            subtitleText={subtitleText}
+          <SubtitleEditor 
+            subtitleText={subtitleText} 
             setIsProcessing={setIsGenerating}
+            initialRefText={refText}
+            onGenerationComplete={handleGenerationComplete}
           />
           <div className="buttonContainer">
             <button
@@ -264,7 +290,7 @@ function SubtitleVoiceStudio() {
             <button
               className="button btn btn-success"
               onClick={handleSave}
-              disabled={isGenerating || !finalAudioUrl}
+              disabled={isGenerating || !isGenerationComplete}
             >
               Lưu
             </button>

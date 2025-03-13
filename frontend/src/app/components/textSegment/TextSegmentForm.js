@@ -4,12 +4,10 @@ import PropTypes from "prop-types";
 const TextSegmentForm = ({
   segments,
   refText,
-  showTiming,
   onRefTextChange,
   onSegmentChange,
   onRemoveSegment,
   onAddSegment,
-  onShowTimingToggle,
   onSubmit,
 }) => {
   return (
@@ -24,12 +22,6 @@ const TextSegmentForm = ({
           required
           placeholder="Enter reference text"
         />
-      </div>
-
-      <div className="timing-controls">
-        <button type="button" onClick={onShowTimingToggle} className="btn">
-          {showTiming ? "Hide Timing Info" : "Show Timing Info"}
-        </button>
       </div>
 
       {segments.map((segment, index) => (
@@ -53,13 +45,6 @@ const TextSegmentForm = ({
             required
             placeholder="Enter text to generate"
           />
-          {showTiming && (
-            <div className="timing-info">
-              <span className="duration">
-                Duration: {segment.duration || "--"}
-              </span>
-            </div>
-          )}
         </div>
       ))}
 
@@ -77,17 +62,14 @@ const TextSegmentForm = ({
 TextSegmentForm.propTypes = {
   segments: PropTypes.arrayOf(
     PropTypes.shape({
-      text: PropTypes.string,
-      duration: PropTypes.number,
+      text: PropTypes.string
     })
   ).isRequired,
   refText: PropTypes.string.isRequired,
-  showTiming: PropTypes.bool.isRequired,
   onRefTextChange: PropTypes.func.isRequired,
   onSegmentChange: PropTypes.func.isRequired,
   onRemoveSegment: PropTypes.func.isRequired,
   onAddSegment: PropTypes.func.isRequired,
-  onShowTimingToggle: PropTypes.func.isRequired,
   onSubmit: PropTypes.func.isRequired,
 };
 

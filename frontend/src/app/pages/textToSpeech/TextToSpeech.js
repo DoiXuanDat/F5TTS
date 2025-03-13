@@ -14,17 +14,16 @@ import AudioControls from "../../components/audio/AudioControls";
 import { BASE_URL } from "../../services/api";
 
 const TextToSpeech = ({ setIsProcessing: setParentIsProcessing }) => {
-  const [segments, setSegments] = useState([{ text: "", duration: null }]);
+  const [segments, setSegments] = useState([{ text: "" }]);
   const [refText, setRefText] = useState("");
   const [audioFile, setAudioFile] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentSegmentPaths, setCurrentSegmentPaths] = useState([]);
-  const [showTiming, setShowTiming] = useState(false);
   const [error, setError] = useState("");
   const [finalAudioUrl, setFinalAudioUrl] = useState(null);
 
   const handleAddSegment = () => {
-    setSegments([...segments, { text: "", duration: null }]);
+    setSegments([...segments, { text: "" }]);
   };
 
   const handleRemoveSegment = (index) => {
@@ -53,16 +52,25 @@ const TextToSpeech = ({ setIsProcessing: setParentIsProcessing }) => {
             formData.append("segment_index", i.toString());
 
             const result = await audioService.generateAudio(formData);
-            console.log('Generated audio path:', result.full_path);
-            paths.push(result.full_path);
+            console.log(`Segment ${i} result:`, result);
+
+            if (!result || !result.audio_path) {
+                throw new Error(`Failed to generate audio for segment ${i}`);
+            }
+
+            paths.push(result.audio_path);
         }
 
-        console.log('Paths to combine:', paths);
+        console.log('Generated audio paths:', paths);
 
         if (paths.length > 0) {
             const combinedResult = await combineAudioSegments(paths);
-            setCurrentSegmentPaths([...paths]);
-            setFinalAudioUrl(combinedResult.path); // Just use the relative path
+            if (combinedResult && combinedResult.path) {
+                setCurrentSegmentPaths([...paths]);
+                setFinalAudioUrl(combinedResult.path);
+            } else {
+                throw new Error('Invalid response from combine audio');
+            }
         }
 
     } catch (error) {
@@ -110,67 +118,16 @@ const TextToSpeech = ({ setIsProcessing: setParentIsProcessing }) => {
     <div className="container">
       <h1>Advanced Text-to-Speech Generator</h1>
       <form onSubmit={handleSubmit}>
-        <div className="form-group">
-          <label htmlFor="ref_text">Reference Text:</label>
-          <input
-            type="text"
-            id="ref_text"
-            value={refText}
-            onChange={(e) => setRefText(e.target.value)}
-            required
-            placeholder="Enter reference text"
-          />
-        </div>
-
-        <div className="timing-controls">
-          <button
-            type="button"
-            onClick={() => setShowTiming(!showTiming)}
-            className="btn"
-          >
-            {showTiming ? "Hide Timing Info" : "Show Timing Info"}
-          </button>
-        </div>
-
-        {segments.map((segment, index) => (
-          <div key={index} className="segment-group">
-            <div className="segment-header">
-              <h3>Text Segment {index + 1}</h3>
-              {segments.length > 1 && (
-                <button
-                  type="button"
-                  className="btn remove-segment"
-                  onClick={() => handleRemoveSegment(index)}
-                >
-                  Remove
-                </button>
-              )}
-            </div>
-            <textarea
-              className="gen-text-segment"
-              value={segment.text}
-              onChange={(e) => handleSegmentChange(index, e.target.value)}
-              required
-              placeholder="Enter text to generate"
-            />
-            {showTiming && (
-              <div className="timing-info">
-                <span className="duration">
-                  Duration: {segment.duration || "--"}
-                </span>
-              </div>
-            )}
-          </div>
-        ))}
-
-        <button
-          type="button"
-          className="btn add-segment-btn"
-          onClick={handleAddSegment}
-        >
-          Add Another Segment
-        </button>
-
+        <TextSegmentForm
+          segments={segments}
+          refText={refText}
+          onRefTextChange={setRefText}
+          onSegmentChange={handleSegmentChange}
+          onRemoveSegment={handleRemoveSegment}
+          onAddSegment={handleAddSegment}
+          onSubmit={handleSubmit}
+        />
+        
         <div className="form-group">
           <label htmlFor="referenceAudio">
             Upload Audio File (WAV format):

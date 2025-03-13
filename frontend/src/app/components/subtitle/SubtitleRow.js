@@ -13,8 +13,11 @@ const SubtitleRow = memo(
     onImageClick,
     onSplitSubtitle,
   }) => {
+
+    // check bug
     const handleTextChange = useCallback(
       (e) => {
+        console.log("Text changed in SubtitleRow:", subtitle.id, e.target.value);
         onUpdateSubtitle(subtitle.id, e.target.value);
       },
       [subtitle.id, onUpdateSubtitle]
@@ -61,14 +64,14 @@ const SubtitleRow = memo(
           />
           <div className="subtitle-actions">
             <button
-              onClick={onAddSubtitleUp}
+              onClick={() => onAddSubtitleUp(subtitle.id)}
               className="action-btn add-up"
               title="Add subtitle above"
             >
               ➕⬆️
             </button>
             <button
-              onClick={onAddSubtitleDown}
+              onClick={() => onAddSubtitleDown(subtitle.id)}
               className="action-btn add-down"
               title="Add subtitle below"
             >

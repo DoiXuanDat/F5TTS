@@ -1,16 +1,55 @@
 import axios from 'axios';
 
-export const BASE_URL = 'http://localhost:8000'; // Match FastAPI default port
+export const BASE_URL = 'http://localhost:8000';
 
+// Create single axios instance
+const apiClient = axios.create({
+  baseURL: BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// Video service functions
+export const videoService = {
+  getAllVideos: async () => {
+    try {
+      const response = await apiClient.get('/videos/');
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching videos:', error);
+      throw error;
+    }
+  },
+  
+  createVideo: async (videoData) => {
+    try {
+      const response = await apiClient.post('/videos/', videoData);
+      return response.data;
+    } catch (error) {
+      console.error('Error creating video:', error);
+      throw error;
+    }
+  },
+
+  deleteVideo: async (id) => {
+    try {
+      await apiClient.delete(`/videos/${id}`);
+    } catch (error) {
+      console.error('Error deleting video:', error);
+      throw error;
+    }
+  }
+};
+
+// Audio service functions
 export const audioService = {
   generateAudio: async (formData) => {
     try {
-      const response = await axios.post(`${BASE_URL}/generate-audio`, formData, {
+      const response = await apiClient.post('/generate-audio/', formData, {
         headers: {
-          'Content-Type': 'multipart/form-data'
+          'Content-Type': 'multipart/form-data',
         },
-        withCredentials: true,
-        maxRedirects: 5
       });
       return response.data;
     } catch (error) {
@@ -20,21 +59,28 @@ export const audioService = {
   }
 };
 
+export default apiClient;
+
 export const combineAudioSegments = async (paths) => {
-    try {
-        const response = await axios.post(`${BASE_URL}/combine-audio`, {
-            paths: paths  // Make sure paths is wrapped in an object
-        }, {
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            withCredentials: true
-        });
-        return response.data;
-    } catch (error) {
-        console.error('Error combining audio:', error);
-        throw handleApiError(error);
-    }
+  try {
+    console.log('Sending paths to backend:', paths);
+    const response = await axios.post(
+      `${BASE_URL}/combine-audio`, 
+      { audio_paths: paths },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+    
+    // Log the response for debugging
+    console.log('Combine audio response:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('Error combining audio segments:', error);
+    throw new Error(error.response?.data?.detail || 'Failed to combine audio segments');
+  }
 };
 
 export const generateSRT = async (audioPath) => {
@@ -49,27 +95,24 @@ export const generateSRT = async (audioPath) => {
     }
 };
 
-export const generateCombinedSRT = async (audioPaths) => {
-    try {
-      const response = await axios.post(
-        `${BASE_URL}/generate-combined-srt`,
-        { audio_paths: audioPaths },
-        {
-          headers: { 'Content-Type': 'application/json' },
-          responseType: 'text' 
-        }
-      );
-
-      if (response.status === 200) {
-        return response;
-      } else {
-        throw new Error(`Server returned status ${response.status}`);
+export const generateCombinedSRT = async (paths) => {
+  try {
+    const response = await axios.post(
+      `${BASE_URL}/generate-combined-srt`,
+      { audio_paths: paths },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        responseType: 'blob',
       }
-    } catch (error) {
-      console.error('Error generating combined SRT:', error);
-      throw error;
-    }
-  };
+    );
+    return response;
+  } catch (error) {
+    console.error('Error generating SRT:', error);
+    throw new Error(error.response?.data?.detail || 'Failed to generate SRT');
+  }
+};
 
 export const generateAllSRT = async (paths) => {
     try {

@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import PropTypes from "prop-types";
+import axios from 'axios';
+import { BASE_URL } from '../../services/api';
+import { VideoStatus, VideoTypes } from '../../types/video';
 import FilePicker from "../common/filePicker/FilePicker";
 import SubtitleList from "./SubtitleList";
 import Settings from "../common/settings/Settings";
@@ -26,8 +29,8 @@ const DEFAULT_IMAGES = [
 const SubtitleEditor = ({
   subtitleText,
   setIsProcessing: setParentIsProcessing,
+  onGenerationComplete
 }) => {
-  // State management with logical grouping
   const [editorState, setEditorState] = useState({
     subtitles: [],
     imageList: DEFAULT_IMAGES,
@@ -45,7 +48,7 @@ const SubtitleEditor = ({
 
   const [audioState, setAudioState] = useState({
     segments: [{ text: "", duration: null }],
-    refText: "",
+    refText: "", // Make sure this is initialized
     audioFile: null,
     isProcessing: false,
     currentSegmentPaths: [],
@@ -74,7 +77,9 @@ const SubtitleEditor = ({
     }));
   }, []);
 
+  //check bug
   const updateSubtitle = useCallback((id, newText) => {
+    console.log("updateSubtitle called:", id, newText);
     setEditorState((prev) => ({
       ...prev,
       subtitles: prev.subtitles.map((subtitle) =>
@@ -164,20 +169,46 @@ const SubtitleEditor = ({
   }, [audioState.currentSegmentPaths]);
 
   const processAudioSegments = useCallback(async () => {
-    const paths = [];
-    for (const segment of audioState.segments) {
-      if (!segment.text.trim()) continue;
-
-      const formData = new FormData();
-      formData.append("ref_text", audioState.refText);
-      formData.append("gen_text", segment.text);
-      formData.append("ref_audio", audioState.audioFile);
-
-      const result = await audioService.generateAudio(formData);
-      paths.push(result.full_path);
+    try {
+      setAudioState(prev => ({ ...prev, isProcessing: true }));
+      
+      // First generate audio for each segment
+      const paths = [];
+      for (const subtitle of editorState.subtitles) {
+        if (!subtitle.text.trim()) continue;
+        
+        const formData = new FormData();
+        formData.append("ref_text", audioState.refText);
+        formData.append("gen_text", subtitle.text);
+        formData.append("ref_audio", audioState.audioFile);
+        
+        const result = await audioService.generateAudio(formData);
+        if (result?.audio_path) {
+          paths.push(result.audio_path);
+        }
+      }
+  
+      // Then combine the audio segments
+      if (paths.length > 0) {
+        const result = await combineAudioSegments(paths);
+        if (result?.path) {
+          setAudioState(prev => ({
+            ...prev,
+            currentSegmentPaths: paths,
+            finalAudioUrl: result.path
+          }));
+          
+          // Log the audio URL for debugging
+          console.log('Final audio URL:', result.path);
+        }
+      }
+    } catch (error) {
+      console.error('Error processing audio segments:', error);
+      setError(error.message || 'Failed to process audio segments');
+    } finally {
+      setAudioState(prev => ({ ...prev, isProcessing: false }));
     }
-    return paths;
-  }, [audioState.segments, audioState.refText, audioState.audioFile]);
+  }, [editorState.subtitles, audioState.refText, audioState.audioFile]);
 
   const splitSentences = useCallback(() => {
     try {
@@ -209,33 +240,70 @@ const SubtitleEditor = ({
   }, [settingsState.dllitems]);
 
   // Audio processing handlers
-  const handleSubmit = useCallback(
-    async (e) => {
-      e.preventDefault();
-      setAudioState((prev) => ({ ...prev, isProcessing: true }));
-      setParentIsProcessing(true);
-      setError("");
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!audioState.audioFile) {
+      setError("Please select a reference audio file");
+      return;
+    }
 
-      try {
-        const paths = await processAudioSegments();
-        if (paths.length > 0) {
-          const combinedResult = await combineAudioSegments(paths);
-          setAudioState((prev) => ({
-            ...prev,
-            currentSegmentPaths: paths,
-            finalAudioUrl: combinedResult.path,
-          }));
+    setAudioState(prev => ({ ...prev, isProcessing: true }));
+    setParentIsProcessing(true);
+    setError("");
+    
+    try {
+      // Create a new video entry first
+      const videoResponse = await axios.post(`${BASE_URL}/videos/`, {
+        title: "New Video", // You can customize this
+        audioPath: "", // Will be updated after audio generation
+      });
+      
+      const videoId = videoResponse.data.id;
+      
+      const paths = [];
+      for (const subtitle of editorState.subtitles) {
+        if (!subtitle.text.trim()) continue;
+        
+        const formData = new FormData();
+        formData.append("ref_text", audioState.refText);
+        formData.append("gen_text", subtitle.text);
+        formData.append("ref_audio", audioState.audioFile);
+        formData.append("segment_index", paths.length.toString());
+        formData.append("video_id", videoId);
+
+        const result = await audioService.generateAudio(formData);
+        if (result && result.audio_path) {
+          paths.push(result.audio_path);
         }
-      } catch (error) {
-        console.error("Error in handleSubmit:", error);
-        setError(error.message || "An error occurred");
-      } finally {
-        setAudioState((prev) => ({ ...prev, isProcessing: false }));
-        setParentIsProcessing(false);
       }
-    },
-    [audioState.segments, setParentIsProcessing]
-  );
+
+      if (paths.length > 0) {
+        const combinedResult = await combineAudioSegments(paths);
+        
+        if (combinedResult && combinedResult.path) {
+          // Update video with final audio path
+          await axios.patch(`${BASE_URL}/videos/${videoId}`, {
+            url: combinedResult.path,
+            status: VideoStatus.COMPLETED
+          });
+
+          onGenerationComplete({
+            videoId,
+            audioUrl: combinedResult.path,
+            duration: combinedResult.duration || 0,
+            paths: paths
+          });
+        }
+      }
+
+    } catch (error) {
+      console.error('Error in handleSubmit:', error);
+      setError(error.message || "An error occurred during audio generation");
+    } finally {
+      setAudioState(prev => ({ ...prev, isProcessing: false }));
+      setParentIsProcessing(false);
+    }
+  };
 
   // Effect for processing subtitle text
   useEffect(() => {
@@ -251,6 +319,28 @@ const SubtitleEditor = ({
       }));
 
       setEditorState((prev) => ({ ...prev, subtitles: newSubtitles }));
+    }
+  }, [subtitleText]);
+
+  useEffect(() => {
+    if (editorState.subtitles.length > 0) {
+      setAudioState(prev => ({
+        ...prev,
+        segments: editorState.subtitles.map(s => ({
+          text: s.text,
+          duration: null
+        }))
+      }));
+    }
+  }, [editorState.subtitles]);
+
+  // Add useEffect to update refText when subtitleText changes
+  useEffect(() => {
+    if (subtitleText) {
+      setAudioState(prev => ({
+        ...prev,
+        refText: subtitleText
+      }));
     }
   }, [subtitleText]);
 
@@ -405,9 +495,10 @@ const SubtitleEditor = ({
         {error && <div className="error-message">{error}</div>}
         {renderAudioControls}
         <button
-          type="submit"
+          onClick={handleSubmit} // Thêm sự kiện onClick
+          type="button" // Đổi type từ "submit" thành "button"
           className="generate-btn"
-          disabled={audioState.isProcessing}
+          disabled={audioState.isProcessing || !audioState.audioFile} // Thêm điều kiện disabled khi chưa chọn file
         >
           {audioState.isProcessing ? "Generating..." : "Generate Audio"}
         </button>
@@ -419,6 +510,7 @@ const SubtitleEditor = ({
 SubtitleEditor.propTypes = {
   subtitleText: PropTypes.string,
   setIsProcessing: PropTypes.func.isRequired,
+  initialRefText: PropTypes.string,
+  onGenerationComplete: PropTypes.func.isRequired
 };
-
 export default SubtitleEditor;
