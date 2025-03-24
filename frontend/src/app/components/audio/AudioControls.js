@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import PropTypes from 'prop-types';
-import { BASE_URL } from '../../services/api';
-// import { createDownloadLink } from '../../services/audioProcessing';
+import { getBaseURL } from '../../services/api';
 import './AudioControls.css';
 
 const AudioControls = ({ audioUrl, label, isLoading }) => {
@@ -10,7 +9,7 @@ const AudioControls = ({ audioUrl, label, isLoading }) => {
   const audioRef = useRef(null);
 
   useEffect(() => {
-    // Load audio metadata to get actual duration
+    // Tải metadata âm thanh để lấy thời lượng thực tế
     const audio = audioRef.current;
     if (audio) {
       audio.addEventListener('loadedmetadata', () => {
@@ -30,7 +29,13 @@ const AudioControls = ({ audioUrl, label, isLoading }) => {
     }
   };
 
-  const getAudioSource = () => `${BASE_URL}/${audioUrl}`;
+  const getAudioSource = () => {
+    // Đảm bảo URL âm thanh có định dạng đúng
+    if (audioUrl.startsWith('http')) {
+      return audioUrl; // Nếu đã là URL đầy đủ
+    }
+    return `${getBaseURL()}/${audioUrl}`; // Nếu là đường dẫn tương đối
+  };
 
   const handleDownload = async () => {
     try {
@@ -65,7 +70,7 @@ const AudioControls = ({ audioUrl, label, isLoading }) => {
         ) : (
           <audio 
             ref={audioRef} 
-            src={`${BASE_URL}/${audioUrl}`}
+            src={getAudioSource()}
             onEnded={handleAudioEnd}
             controls
             preload="metadata"

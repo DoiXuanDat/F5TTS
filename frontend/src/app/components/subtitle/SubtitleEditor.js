@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import PropTypes from "prop-types";
 import axios from 'axios';
-import { BASE_URL } from '../../services/api';
+import { getBaseURL } from '../../services/api';
 import { VideoStatus, VideoTypes } from '../../types/video';
 import FilePicker from "../common/filePicker/FilePicker";
 import SubtitleList from "./SubtitleList";
-import Settings from "../common/settings/Settings";
+import TTSSelector from '../tts/TTSSelector';
+// import Settings from "../common/settings/Settings";
 import AudioControls from "../audio/AudioControls";
 import {
   audioService,
@@ -31,6 +32,14 @@ const SubtitleEditor = ({
   setIsProcessing: setParentIsProcessing,
   onGenerationComplete
 }) => {
+  const [ttsProvider, setTtsProvider] = useState('f5-tts');
+  const [voiceOrSpeaker, setVoiceOrSpeaker] = useState(null);
+
+  const handleProviderChange = (provider, voiceOrSpeakerId) => {
+    setTtsProvider(provider);
+    setVoiceOrSpeaker(voiceOrSpeakerId);
+  };
+
   const [editorState, setEditorState] = useState({
     subtitles: [],
     imageList: DEFAULT_IMAGES,
@@ -54,6 +63,11 @@ const SubtitleEditor = ({
     currentSegmentPaths: [],
     showTiming: false,
     finalAudioUrl: null,
+  });
+
+  const [audioSettings, setAudioSettings] = useState({
+    speed: 0.5,
+    nfeStep: 16
   });
 
   const [error, setError] = useState("");
@@ -242,60 +256,72 @@ const SubtitleEditor = ({
   // Audio processing handlers
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!audioState.audioFile) {
-      setError("Please select a reference audio file");
+    if (!audioState.audioFile && ttsProvider === 'f5-tts') {
+      setError("Please select a reference audio file for F5-TTS");
       return;
     }
-
+  
     setAudioState(prev => ({ ...prev, isProcessing: true }));
     setParentIsProcessing(true);
     setError("");
     
     try {
-      // Create a new video entry first
-      const videoResponse = await axios.post(`${BASE_URL}/videos/`, {
-        title: "New Video", // You can customize this
-        audioPath: "", // Will be updated after audio generation
+      const videoResponse = await axios.post(`${getBaseURL()}/videos/`, {
+        title: "New Video",
+        audioPath: "",
       });
       
       const videoId = videoResponse.data.id;
-      
       const paths = [];
+  
       for (const subtitle of editorState.subtitles) {
         if (!subtitle.text.trim()) continue;
         
+        let result;
         const formData = new FormData();
-        formData.append("ref_text", audioState.refText);
-        formData.append("gen_text", subtitle.text);
-        formData.append("ref_audio", audioState.audioFile);
-        formData.append("segment_index", paths.length.toString());
-        formData.append("video_id", videoId);
-
-        const result = await audioService.generateAudio(formData);
-        if (result && result.audio_path) {
+        
+        switch(ttsProvider) {
+          case 'f5-tts':
+            formData.append("ref_text", audioState.refText);
+            formData.append("gen_text", subtitle.text);
+            formData.append("ref_audio", audioState.audioFile);
+            formData.append("speed", audioSettings.speed.toString());
+            result = await audioService.generateAudio(formData);
+            break;
+  
+          case 'kokoro':
+            formData.append("text", subtitle.text);
+            formData.append("speaker_id", voiceOrSpeaker || 'default');
+            formData.append("speed", audioSettings.speed.toString());
+            const kokoroResponse = await axios.post(
+              `${getBaseURL()}/generate-audio-kokoro/`, 
+              formData
+            );
+            result = kokoroResponse.data;
+            break;
+        }
+        
+        if (result?.audio_path) {
           paths.push(result.audio_path);
         }
       }
-
+  
       if (paths.length > 0) {
         const combinedResult = await combineAudioSegments(paths);
-        
-        if (combinedResult && combinedResult.path) {
-          // Update video with final audio path
-          await axios.patch(`${BASE_URL}/videos/${videoId}`, {
+        if (combinedResult?.path) {
+          await axios.patch(`${getBaseURL()}/videos/${videoId}`, {
             url: combinedResult.path,
             status: VideoStatus.COMPLETED
           });
-
+  
           onGenerationComplete({
             videoId,
             audioUrl: combinedResult.path,
             duration: combinedResult.duration || 0,
-            paths: paths
+            paths
           });
         }
       }
-
     } catch (error) {
       console.error('Error in handleSubmit:', error);
       setError(error.message || "An error occurred during audio generation");
@@ -460,6 +486,27 @@ const SubtitleEditor = ({
             </div>
           </div>
         </div>
+
+        <div className="settings-group">
+          <div className="settings-item">
+            <label htmlFor="speed">Speech Speed</label>
+            <div className="settings-input-group">
+              <input
+                id="speed"
+                type="range"
+                min="0.1"
+                max="2.0"
+                step="0.1"
+                value={audioSettings.speed}
+                onChange={(e) => setAudioSettings(prev => ({
+                  ...prev,
+                  speed: parseFloat(e.target.value)
+                }))}
+              />
+              <span>{audioSettings.speed}x</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       <SubtitleList
@@ -484,21 +531,55 @@ const SubtitleEditor = ({
       )}
 
       <div className="audio-section">
-        <input
-          type="file"
-          id="referenceAudio"
-          onChange={handleFileChange}
-          accept="audio/wav"
-          className="audio-input"
-          required
+        <TTSSelector 
+          onProviderChange={handleProviderChange}
+          selectedProvider={ttsProvider}
+          disabled={audioState.isProcessing}
         />
+        
+        {ttsProvider === 'f5-tts' && (
+          <div className="file-input-container">
+            <label htmlFor="referenceAudio">Reference Audio:</label>
+            <input
+              type="file"
+              id="referenceAudio"
+              onChange={handleFileChange}
+              accept="audio/wav"
+              className="audio-input"
+              required
+            />
+          </div>
+        )}
+        
+        <div className="settings-group">
+          <div className="settings-item">
+            <label htmlFor="speed">Speech Speed</label>
+            <div className="settings-input-group">
+              <input
+                id="speed"
+                type="range"
+                min="0.1"
+                max="2.0"
+                step="0.1"
+                value={audioSettings.speed}
+                onChange={(e) => setAudioSettings(prev => ({
+                  ...prev,
+                  speed: parseFloat(e.target.value)
+                }))}
+              />
+              <span>{audioSettings.speed}x</span>
+            </div>
+          </div>
+        </div>
+        
         {error && <div className="error-message">{error}</div>}
         {renderAudioControls}
+        
         <button
-          onClick={handleSubmit} // Thêm sự kiện onClick
-          type="button" // Đổi type từ "submit" thành "button"
+          onClick={handleSubmit}
+          type="button"
           className="generate-btn"
-          disabled={audioState.isProcessing || !audioState.audioFile} // Thêm điều kiện disabled khi chưa chọn file
+          disabled={audioState.isProcessing || (ttsProvider === 'f5-tts' && !audioState.audioFile)}
         >
           {audioState.isProcessing ? "Generating..." : "Generate Audio"}
         </button>

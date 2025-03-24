@@ -1,7 +1,9 @@
 import logging
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pathlib import Path
+from starlette.responses import RedirectResponse
 
 from config import AUDIO_DIR
 from api.middleware import setup_middleware
@@ -15,6 +17,12 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 
+# Define base directories
+BASE_DIR = Path(__file__).parent
+STATIC_DIR = BASE_DIR / "static"
+if not STATIC_DIR.exists():
+    STATIC_DIR.mkdir(parents=True)
+
 # Initialize FastAPI app
 app = FastAPI(title="F5 TTS API", description="API for text-to-speech conversion using F5 TTS model")
 
@@ -25,8 +33,9 @@ setup_middleware(app)
 if not AUDIO_DIR.exists():
     AUDIO_DIR.mkdir(parents=True)
 
-# Mount static files directory for serving audio files
+# Mount static files directories
 app.mount("/audio", StaticFiles(directory=str(AUDIO_DIR)), name="audio")
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 # Include routers from different modules
 app.include_router(audio.router, tags=["Audio Generation"])
@@ -38,6 +47,13 @@ video_storage.load_videos()
 
 @app.get("/")
 async def root():
+    """API root endpoint - serve backend info or redirect to frontend"""
+    # Check if we're serving the frontend
+    index_path = STATIC_DIR / "index.html"
+    if index_path.exists():
+        return FileResponse(index_path)
+    
+    # Otherwise return API info
     return {
         "message": "F5 TTS API is running",
         "endpoints": {
@@ -48,11 +64,25 @@ async def root():
         }
     }
 
+# Serve frontend routes for SPA
+@app.get("/{full_path:path}")
+async def serve_frontend(full_path: str):
+    # If path starts with api/ or known API endpoints, raise 404
+    if full_path.startswith(("api/", "audio/", "videos/")):
+        raise HTTPException(status_code=404, detail="API endpoint not found")
+    
+    # Otherwise, serve the frontend index.html
+    index_path = STATIC_DIR / "index.html"
+    if index_path.exists():
+        return FileResponse(index_path)
+    else:
+        raise HTTPException(status_code=404, detail="Frontend not found")
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
         "server:app",
-        host="0.0.0.0",
+        host="0.0.0.0",  # Listen on all interfaces
         port=8000,
         reload=True,
         access_log=True,

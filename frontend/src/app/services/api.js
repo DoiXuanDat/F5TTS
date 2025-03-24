@@ -1,16 +1,24 @@
 import axios from 'axios';
 
-export const BASE_URL = 'http://localhost:8000';
+export const BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000';
 
-// Create single axios instance
+export const getBaseURL = () => BASE_URL;
+
+// Tạo phiên bản axios duy nhất
 const apiClient = axios.create({
-  baseURL: BASE_URL,
+  baseURL: getBaseURL(),
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Video service functions
+// Cập nhật baseURL nếu được lưu trữ trong localStorage
+apiClient.interceptors.request.use(config => {
+  config.baseURL = getBaseURL();
+  return config;
+});
+
+// Các hàm dịch vụ video
 export const videoService = {
   getAllVideos: async () => {
     try {
@@ -42,20 +50,16 @@ export const videoService = {
   }
 };
 
-// Audio service functions
+// Các hàm dịch vụ âm thanh
 export const audioService = {
   generateAudio: async (formData) => {
-    try {
-      const response = await apiClient.post('/generate-audio/', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-      return response.data;
-    } catch (error) {
-      console.error('Error generating audio:', error);
-      throw error;
-    }
+    const response = await axios.post(`${BASE_URL}/generate-audio/`, formData);
+    return response.data;
+  },
+  
+  getKokoroVoices: async () => {
+    const response = await axios.get(`${BASE_URL}/kokoro-voices/`);
+    return response.data;
   }
 };
 
@@ -65,7 +69,7 @@ export const combineAudioSegments = async (paths) => {
   try {
     console.log('Sending paths to backend:', paths);
     const response = await axios.post(
-      `${BASE_URL}/combine-audio`, 
+      `${getBaseURL()}/combine-audio`, 
       { audio_paths: paths },
       {
         headers: {
@@ -74,7 +78,7 @@ export const combineAudioSegments = async (paths) => {
       }
     );
     
-    // Log the response for debugging
+    // Ghi nhật ký phản hồi để gỡ lỗi
     console.log('Combine audio response:', response.data);
     return response.data;
   } catch (error) {
@@ -85,7 +89,7 @@ export const combineAudioSegments = async (paths) => {
 
 export const generateSRT = async (audioPath) => {
     try {
-        const response = await axios.post(`${BASE_URL}/generate-srt`, 
+        const response = await axios.post(`${getBaseURL()}/generate-srt`, 
             { audioPath },
             { responseType: 'blob' }
         );
@@ -98,7 +102,7 @@ export const generateSRT = async (audioPath) => {
 export const generateCombinedSRT = async (paths) => {
   try {
     const response = await axios.post(
-      `${BASE_URL}/generate-combined-srt`,
+      `${getBaseURL()}/generate-combined-srt`,
       { audio_paths: paths },
       {
         headers: {
@@ -116,7 +120,7 @@ export const generateCombinedSRT = async (paths) => {
 
 export const generateAllSRT = async (paths) => {
     try {
-        const response = await axios.post(`${BASE_URL}/generate-all-srt`, 
+        const response = await axios.post(`${getBaseURL()}/generate-all-srt`, 
             { paths },
             { responseType: 'blob' }
         );

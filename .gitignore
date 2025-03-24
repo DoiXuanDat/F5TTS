@@ -69,3 +69,8 @@ tts_voice_files
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+*.yml
+*.yaml
+*.zip
+*.png

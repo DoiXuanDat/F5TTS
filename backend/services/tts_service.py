@@ -25,13 +25,12 @@ F5TTS_ema_model = load_model(
 
 @gpu_decorator
 def infer(ref_audio_orig, ref_text, gen_text, remove_silence=False, 
-          cross_fade_duration=0.15, speed=1.0, nfe_step=8):
+          cross_fade_duration=0.15, speed=0.5, nfe_step=8):
     """Generate audio using F5-TTS model"""
-    logger.info("Starting text preprocessing...")
-    gen_text = gen_text.lower()
-    gen_text = translate_number_to_text(gen_text)
+    logger.info(f"Starting text preprocessing with speed={speed}...")
     
     # Inference process
+    logger.info(f"About to call infer_process with speed={speed}")
     final_wave, final_sample_rate, combined_spectrogram = infer_process(
         ref_audio_orig, ref_text, gen_text, F5TTS_ema_model, vocoder,
         cross_fade_duration=cross_fade_duration, speed=speed, nfe_step=nfe_step

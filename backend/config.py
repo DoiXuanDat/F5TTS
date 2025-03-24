@@ -1,5 +1,11 @@
+# backend/config.py
+import os
 import logging
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Define base directory for audio files
 BASE_DIR = Path(__file__).parent
@@ -9,7 +15,7 @@ if not AUDIO_DIR.exists():
 
 # Configure logging
 logging.basicConfig(
-    level=logging.WARNING,  # Change from INFO to WARNING
+    level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
     handlers=[logging.StreamHandler()]
 )
@@ -26,4 +32,3 @@ def gpu_decorator(func):
     if USING_SPACES:
         return spaces.GPU(func)
     return func
-

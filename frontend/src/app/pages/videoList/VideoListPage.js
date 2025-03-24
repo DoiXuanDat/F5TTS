@@ -2,8 +2,9 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FaCopy, FaEdit, FaPlay, FaTrash, FaPlus } from "react-icons/fa";
 import axios from "axios";
-import { BASE_URL } from "../../services/api";
+import { getBaseURL } from "../../services/api";
 import "./VideoListPage.css";
+
 
 const VideoListPage = () => {
   const [videos, setVideos] = useState([]);
@@ -13,7 +14,7 @@ const VideoListPage = () => {
 
   const fetchVideos = async () => {
     try {
-      const response = await axios.get(`${BASE_URL}/videos/`);
+      const response = await axios.get(`${getBaseURL()}/videos/`);
       if (Array.isArray(response.data)) {
         setVideos(response.data);
       } else {
@@ -37,10 +38,22 @@ const VideoListPage = () => {
     // Add toast notification here if desired
   };
 
+  const renderTtsProvider = (video) => {
+    if (!video.metadata || !video.metadata.source) return "F5-TTS";
+    
+    const sourceMap = {
+      "f5-tts": "F5-TTS",
+      "minimax": "MiniMax.io",
+      "kokoro": "Kokoro-TTS"
+    };
+    
+    return sourceMap[video.metadata.source] || "Unknown";
+  };
+
   const handleDelete = async (id) => {
     if (window.confirm("Bạn có chắc chắn muốn xóa video này?")) {
       try {
-        await axios.delete(`${BASE_URL}/videos/${id}`);
+        await axios.delete(`${getBaseURL()}/videos/${id}`);
         setVideos(videos.filter(video => video.id !== id));
       } catch (err) {
         console.error("Error deleting video:", err);
@@ -97,6 +110,7 @@ const VideoListPage = () => {
               <tr>
                 <th>Video</th>
                 <th>Trạng thái</th>
+                <th>TTS Provider</th>
                 <th>ID</th>
                 <th>Ngày tạo</th>
               </tr>
@@ -118,7 +132,7 @@ const VideoListPage = () => {
                             className="action-btn"
                             onClick={() => {
                               if (video.url) {
-                                navigator.clipboard.writeText(`${BASE_URL}/${video.url}`);
+                                navigator.clipboard.writeText(`${getBaseURL()}/${video.url}`);
                                 alert('Đã sao chép đường dẫn!');
                               }
                             }}
@@ -137,7 +151,7 @@ const VideoListPage = () => {
                           </button>
                           <button
                             className="action-btn"
-                            onClick={() => window.open(`${BASE_URL}/${video.url}`, "_blank")}
+                            onClick={() => window.open(`${getBaseURL()}/${video.url}`, "_blank")}
                             disabled={!video.url || video.status !== 'completed'}
                             title="Phát"
                           >
@@ -153,6 +167,11 @@ const VideoListPage = () => {
                         </div>
                       </div>
                     </div>
+                  </td>
+                  <td className="tts-provider-cell">
+                    <span className={`tts-provider-badge ${video.metadata?.source || "f5-tts"}`}>
+                      {renderTtsProvider(video)}
+                    </span>
                   </td>
                   <td>
                     <span className={`status-badge ${video.status}`}>

@@ -12,13 +12,12 @@ gradio>=3.45.2
 jieba
 librosa
 matplotlib
-numpy<=1.26.4
 pydub
 pypinyin
 safetensors
 soundfile
 tomli
-torch>=2.0.0
+
 torchaudio>=2.0.0
 torchdiffeq
 tqdm>=4.65.0
@@ -28,4 +27,9 @@ vocos
 wandb
 x_transformers>=1.31.14
 num2words
-whisper-ai
+pydantic==2.5.2
+pydantic-core==2.14.5
+python-multipart==0.0.6
+numpy
+torch
+kokoro-onnx

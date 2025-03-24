@@ -21,6 +21,10 @@ const TextToSpeech = ({ setIsProcessing: setParentIsProcessing }) => {
   const [currentSegmentPaths, setCurrentSegmentPaths] = useState([]);
   const [error, setError] = useState("");
   const [finalAudioUrl, setFinalAudioUrl] = useState(null);
+  const [audioSettings, setAudioSettings] = useState({
+    speed: 0.5,
+    nfeStep: 16
+  });
 
   const handleAddSegment = () => {
     setSegments([...segments, { text: "" }]);
@@ -50,6 +54,8 @@ const TextToSpeech = ({ setIsProcessing: setParentIsProcessing }) => {
             formData.append("gen_text", segments[i].text);
             formData.append("ref_audio", audioFile);
             formData.append("segment_index", i.toString());
+            formData.append("speed", audioSettings.speed.toString());
+            formData.append("nfe_step", audioSettings.nfeStep.toString());
 
             const result = await audioService.generateAudio(formData);
             console.log(`Segment ${i} result:`, result);
@@ -139,6 +145,25 @@ const TextToSpeech = ({ setIsProcessing: setParentIsProcessing }) => {
             accept="audio/wav"
             required
           />
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="speed">Speech Speed</label>
+          <div className="input-group settings-input-group">
+            <input
+              type="range"
+              id="speed"
+              min="0.1"
+              max="2.0"
+              step="0.1"
+              value={audioSettings.speed}
+              onChange={(e) => setAudioSettings(prev => ({
+                ...prev,
+                speed: parseFloat(e.target.value)
+              }))}
+            />
+            <span>{audioSettings.speed}x</span>
+          </div>
         </div>
 
         <button

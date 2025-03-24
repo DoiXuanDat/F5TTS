@@ -6,6 +6,10 @@ from fastapi import APIRouter, File, Form, UploadFile, HTTPException
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 from typing import List
+from services.minimax_tts_service import minimax_tts_service
+import base64
+from services.kokoro_tts_service import kokoro_tts_service
+import soundfile as sf
 
 from config import AUDIO_DIR, logger
 from models.schemas import CombineAudioRequest
@@ -282,3 +286,165 @@ async def get_audio(filename: str):
             "Content-Disposition": f"attachment; filename={filename}"
         }
     )
+
+@router.post("/generate-audio-minimax/")
+async def generate_audio_minimax(
+    text: str = Form(...),
+    voice_id: str = Form("female-voice-1"),
+    speed: float = Form(1.0),
+    segment_index: int = Form(None),
+    video_id: str = Form(None)
+):
+    try:
+        start_time = time.time()
+        
+        # Update video status if video_id is provided
+        if video_id:
+            video = video_storage.get_video(video_id)
+            if video:
+                video_storage.update_video(video_id, {"status": "processing"})
+            logger.info(f"Processing audio for video {video_id}")
+        
+        # Generate unique filename for output
+        output_filename = generate_unique_filename()
+        output_path = AUDIO_DIR / f"{output_filename}.wav"
+        
+        # Generate audio using MiniMax service
+        audio_data_base64, sample_rate = minimax_tts_service.generate_speech(
+            text=text,
+            voice_id=voice_id,
+            speed=speed
+        )
+        
+        # Decode base64 to bytes
+        audio_data = base64.b64decode(audio_data_base64)
+        
+        # Save the audio file
+        with open(output_path, "wb") as f:
+            f.write(audio_data)
+            
+        processing_time = time.time() - start_time
+        logger.info(f"MiniMax audio generation completed in {processing_time:.2f} seconds")
+        
+        # Save metadata alongside the audio file
+        metadata = {
+            "segment_index": segment_index,
+            "original_text": text,
+            "voice_id": voice_id,
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "source": "minimax"
+        }
+        
+        metadata_path = AUDIO_DIR / f"{output_filename}.json"
+        save_metadata(metadata_path, metadata)
+        
+        # Update video status on success if video_id is provided
+        if video_id and video_storage.get_video(video_id):
+            video_storage.update_video(video_id, {"status": "completed"})
+            logger.info(f"Completed audio generation for video {video_id}")
+            
+        return {
+            "audio_path": f"{output_filename}.wav",
+            "status": "success",
+            "processing_time": processing_time,
+            "metadata": metadata,
+            "video_id": video_id
+        }
+        
+    except Exception as e:
+        # Update video status on error if video_id is provided
+        if video_id and video_storage.get_video(video_id):
+            video_storage.update_video(video_id, {"status": "error", "error": str(e)})
+            logger.error(f"Error generating audio for video {video_id}: {str(e)}")
+            
+        logger.error(f"Error generating audio with MiniMax: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/minimax-voices/")
+async def get_minimax_voices():
+    """Get available voices from MiniMax TTS service"""
+    try:
+        voices = minimax_tts_service.get_available_voices()
+        return voices
+    except Exception as e:
+        logger.error(f"Error getting MiniMax voices: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/generate-audio-kokoro/")
+async def generate_audio_kokoro(
+    text: str = Form(...),
+    speaker_id: str = Form("default"),
+    speed: float = Form(1.0),
+    segment_index: int = Form(None),
+    video_id: str = Form(None)
+):
+    try:
+        start_time = time.time()
+        
+        # Update video status if video_id is provided
+        if video_id:
+            video = video_storage.get_video(video_id)
+            if video:
+                video_storage.update_video(video_id, {"status": "processing"})
+            logger.info(f"Processing audio for video {video_id}")
+        
+        # Generate unique filename for output
+        output_filename = generate_unique_filename()
+        output_path = AUDIO_DIR / f"{output_filename}.wav"
+        
+        # Generate audio using Kokoro service
+        audio_data, sample_rate = kokoro_tts_service.generate_speech(
+            text=text,
+            speaker_id=speaker_id,
+            speed=speed
+        )
+        
+        # Save the audio file
+        sf.write(str(output_path), audio_data, sample_rate)
+            
+        processing_time = time.time() - start_time
+        logger.info(f"Kokoro audio generation completed in {processing_time:.2f} seconds")
+        
+        # Save metadata alongside the audio file
+        metadata = {
+            "segment_index": segment_index,
+            "original_text": text,
+            "speaker_id": speaker_id,
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "source": "kokoro"
+        }
+        
+        metadata_path = AUDIO_DIR / f"{output_filename}.json"
+        save_metadata(metadata_path, metadata)
+        
+        # Update video status on success if video_id is provided
+        if video_id and video_storage.get_video(video_id):
+            video_storage.update_video(video_id, {"status": "completed"})
+            logger.info(f"Completed audio generation for video {video_id}")
+            
+        return {
+            "audio_path": f"{output_filename}.wav",
+            "status": "success",
+            "processing_time": processing_time,
+            "metadata": metadata,
+            "video_id": video_id
+        }
+        
+    except Exception as e:
+        # Update video status on error if video_id is provided
+        if video_id and video_storage.get_video(video_id):
+            video_storage.update_video(video_id, {"status": "error", "error": str(e)})
+            logger.error(f"Error generating audio for video {video_id}: {str(e)}")
+            
+        logger.error(f"Error generating audio with Kokoro: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/kokoro-speakers/")
+async def get_kokoro_speakers():
+    """Get available speakers from Kokoro TTS service"""
+    try:
+        speakers = kokoro_tts_service.get_available_speakers()
+        return speakers
+    except Exception as e:
+        logger.error(f"Error getting Kokoro speakers: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))

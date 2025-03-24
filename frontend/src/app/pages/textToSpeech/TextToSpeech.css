@@ -266,3 +266,12 @@ audio {
     margin: 0.5rem 0;
   }
 }
+.settings-input-group input[type="range"] {
+  width: 150px;
+  margin-right: 10px;
+}
+
+.settings-input-group span {
+  min-width: 40px;
+  text-align: right;
+}

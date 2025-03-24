@@ -5,17 +5,29 @@ import { VideoProvider } from "./context/VideoContext";
 import SubtitleVoiceStudio from "./pages/subtitleVoiceStudio/SubtitleVoiceStudio";
 import VideoListPage from "./pages/videoList/VideoListPage";
 import ImportText from './pages/importText/ImportText';
+import ApiConfig from './components/common/ApiConfig/ApiConfig';
+
 
 function App() {
   return (
     <VideoProvider>
       <Router>
-        <Routes>
+        <div className="App">
+          <nav className="navigation">
+            <a href="/">Studio</a>
+            <a href="/import-text">Import Text</a>
+            <a href="/video-list">Videos</a>
+          </nav>
           
-          <Route path="/" element={<SubtitleVoiceStudio />} />
-          <Route path="/video-list" element={<VideoListPage />} />
-          <Route path="/import-text" element={<ImportText />} />
-        </Routes>
+          <Routes>
+            <Route path="/" element={<SubtitleVoiceStudio />} />
+            <Route path="/video-list" element={<VideoListPage />} />
+            <Route path="/import-text" element={<ImportText />} />
+          </Routes>
+          
+          {/* API Configuration Component */}
+          <ApiConfig />
+        </div>
       </Router>
     </VideoProvider>
   );
