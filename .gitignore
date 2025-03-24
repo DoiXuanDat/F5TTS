@@ -74,4 +74,4 @@ yarn-error.log*
 *.yaml
 *.zip
 *.png
-*.exe
+cloudflared.exe
