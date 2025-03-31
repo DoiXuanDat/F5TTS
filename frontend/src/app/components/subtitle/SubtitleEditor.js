@@ -289,16 +289,38 @@ const SubtitleEditor = ({
             result = await audioService.generateAudio(formData);
             break;
   
-          case 'kokoro':
-            formData.append("text", subtitle.text);
-            formData.append("speaker_id", voiceOrSpeaker || 'default');
-            formData.append("speed", audioSettings.speed.toString());
-            const kokoroResponse = await axios.post(
-              `${getBaseURL()}/generate-audio-kokoro/`, 
-              formData
-            );
-            result = kokoroResponse.data;
-            break;
+            case 'kokoro':
+              // Create form data for Kokoro TTS
+              const kokoroFormData = new FormData();
+              kokoroFormData.append("text", subtitle.text);
+              kokoroFormData.append("speaker_id", voiceOrSpeaker || 'default');
+              kokoroFormData.append("speed", audioSettings.speed.toString());
+              
+              // Generate audio using Kokoro TTS endpoint
+              try {
+                const kokoroResponse = await axios.post(
+                  `${getBaseURL()}/generate-audio-kokoro/`, 
+                  kokoroFormData,
+                  {
+                    headers: {
+                      'Content-Type': 'multipart/form-data'
+                    }
+                  }
+                );
+                
+                // Verify the response contains the audio path
+                if (kokoroResponse.data && kokoroResponse.data.audio_path) {
+                  result = kokoroResponse.data;
+                  console.log('Kokoro TTS audio generated:', result.audio_path);
+                } else {
+                  console.error('Kokoro TTS response missing audio path:', kokoroResponse.data);
+                  throw new Error('Failed to generate Kokoro TTS audio');
+                }
+              } catch (error) {
+                console.error('Kokoro TTS generation error:', error);
+                throw error;
+              }
+              break;
         }
         
         if (result?.audio_path) {

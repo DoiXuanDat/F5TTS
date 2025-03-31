@@ -1,35 +1,22 @@
-fastapi
-uvicorn
+# Core dependencies
+fastapi>=0.109.1
+uvicorn>=0.27.0
+python-multipart>=0.0.6
+soundfile>=0.12.1
+markupsafe>=2.0.1
 
-accelerate>=0.33.0
-bitsandbytes==0.44.1
-cached_path
-click
-
-datasets
-ema_pytorch>=0.5.2
-gradio>=3.45.2
-jieba
-librosa
-matplotlib
-pydub
-pypinyin
-safetensors
-soundfile
-tomli
-
-torchaudio>=2.0.0
-torchdiffeq
-tqdm>=4.65.0
-transformers
-transformers_stream_generator
-vocos
-wandb
-x_transformers>=1.31.14
-num2words
-pydantic==2.5.2
-pydantic-core==2.14.5
-python-multipart==0.0.6
+# Kokoro TTS dependencies
+kokoro-onnx>=0.4.6
 numpy
-torch
-kokoro-onnx
+librosa>=0.10.1
+sounddevice>=0.5.1
+scipy
+numba
+simplejson>=3.19.3
+transformers>=4.37.2
+pydantic>=2.5.2
+
+# Optional dependencies
+requests>=2.32.3
+urllib3>=2.3.0
+colorama>=0.4.6

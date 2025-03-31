@@ -1,6 +1,7 @@
 import json
 from datetime import datetime
 from typing import Dict, List, Optional
+import time
 from models.schemas import Video
 from config import AUDIO_DIR, logger
 
@@ -71,6 +72,25 @@ class VideoStorage:
             self.save_videos()
             return True
         return False
+
+class VideoService:
+    def __init__(self):
+        self.videos = {}
+        
+    async def create_video(self, title, audio_path=None):
+        video_id = f"VID{int(time.time() * 1000)}"
+        self.videos[video_id] = {
+            "id": video_id,
+            "title": title,
+            "status": "pending",  # Add status field
+            "audio_path": audio_path,
+            "created_at": datetime.now().isoformat()
+        }
+        return video_id
+
+    def update_video_status(self, video_id, status):
+        if video_id in self.videos:
+            self.videos[video_id]["status"] = status
 
 video_storage = VideoStorage()
 __all__ = ['video_storage']

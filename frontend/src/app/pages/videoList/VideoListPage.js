@@ -16,7 +16,18 @@ const VideoListPage = () => {
     try {
       const response = await axios.get(`${getBaseURL()}/videos/`);
       if (Array.isArray(response.data)) {
-        setVideos(response.data);
+        // Transform video data to include proper status and metadata
+        const updatedVideos = response.data.map(video => ({
+          ...video,
+          metadata: {
+            ...video.metadata,
+            source: video.metadata?.source || 
+              (video.audio_path?.includes('kokoro') ? 'kokoro' : 'f5-tts')
+          },
+          status: video.status || 
+            (video.audio_path ? 'completed' : 'pending')
+        }));
+        setVideos(updatedVideos);
       } else {
         setVideos([]);
       }
@@ -29,9 +40,17 @@ const VideoListPage = () => {
 
   useEffect(() => {
     fetchVideos();
-    const interval = setInterval(fetchVideos, 30000); 
+    const interval = setInterval(() => {
+      // Only poll if there are pending or processing videos
+      const hasProcessingVideos = videos.some(
+        v => v.status === 'pending' || v.status === 'processing'
+      );
+      if (hasProcessingVideos) {
+        fetchVideos();
+      }
+    }, 5000); // Poll every 5 seconds instead of 30
     return () => clearInterval(interval);
-  }, []);
+  }, [videos]);
 
   const handleCopyUrl = (url) => {
     navigator.clipboard.writeText(url);
@@ -39,7 +58,13 @@ const VideoListPage = () => {
   };
 
   const renderTtsProvider = (video) => {
-    if (!video.metadata || !video.metadata.source) return "F5-TTS";
+    if (!video.metadata || !video.metadata.source) {
+      // Check audio path to determine provider
+      if (video.audio_path?.includes('kokoro')) {
+        return "Kokoro-TTS";
+      }
+      return "F5-TTS";
+    }
     
     const sourceMap = {
       "f5-tts": "F5-TTS",
@@ -76,9 +101,18 @@ const VideoListPage = () => {
       completed: "Hoàn thành",
       processing: "Đang xử lý",
       pending: "Đang chờ",
-      error: `Lỗi: ${error || 'Không xác định'}`
+      error: `Lỗi: ${error || 'Không xác định'}`,
+      'kokoro-processing': "Đang tạo âm thanh (Kokoro)",
+      'kokoro-error': `Lỗi Kokoro TTS: ${error || 'Không xác định'}`
     };
     return statusMap[status] || status;
+  };
+
+  const getStatusClass = (status) => {
+    if (status?.includes('kokoro')) {
+      return `status-badge kokoro-${status.split('-')[1]}`;
+    }
+    return `status-badge ${status}`;
   };
 
   return (
@@ -174,7 +208,7 @@ const VideoListPage = () => {
                     </span>
                   </td>
                   <td>
-                    <span className={`status-badge ${video.status}`}>
+                    <span className={getStatusClass(video.status)}>
                       {renderStatus(video.status, video.error)}
                     </span>
                   </td>

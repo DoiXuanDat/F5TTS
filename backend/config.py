@@ -9,7 +9,9 @@ load_dotenv()
 
 # Define base directory for audio files
 BASE_DIR = Path(__file__).parent
+PROJECT_DIR = BASE_DIR.parent
 AUDIO_DIR = BASE_DIR / "generated_audio_files"
+KOKORO_DIR = PROJECT_DIR / "kokoro-tts"  # Update Kokoro path
 if not AUDIO_DIR.exists():
     AUDIO_DIR.mkdir(parents=True)
 

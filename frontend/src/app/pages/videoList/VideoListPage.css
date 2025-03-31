@@ -123,6 +123,16 @@
   color: #664d03;
 }
 
+.status-badge.kokoro-processing {
+  background-color: #007bff;
+  color: white;
+}
+
+.status-badge.kokoro-error {
+  background-color: #dc3545;
+  color: white;
+}
+
 @media (max-width: 768px) {
   .video-list-container {
     padding: 1rem;
@@ -160,7 +170,6 @@
   color: #664d03;
 }
 
-
 .tts-provider-badge {
   display: inline-block;
   padding: 4px 8px;
@@ -175,8 +184,8 @@
 }
 
 .tts-provider-badge.kokoro {
-  background-color: #d1e7dd;
-  color: #20c997;
+  background-color: #6f42c1;
+  color: white;
 }
 
 .tts-provider-badge.minimax {

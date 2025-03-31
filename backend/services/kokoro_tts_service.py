@@ -1,4 +1,3 @@
-# backend/services/kokoro_tts_service.py
 import os
 import subprocess
 import tempfile
@@ -6,80 +5,117 @@ import soundfile as sf
 import numpy as np
 from pathlib import Path
 import sys
-from config import logger, BASE_DIR
 import re
+import uuid
+
+from config import logger, KOKORO_DIR, BASE_DIR, AUDIO_DIR
 
 class KokoroTTSService:
     def __init__(self):
-        # Đường dẫn đến thư mục cài đặt Kokoro-TTS
-        self.kokoro_path = os.environ.get("KOKORO_TTS_PATH", str(BASE_DIR / "kokoro-tts"))
+        self.kokoro_path = KOKORO_DIR
         self.python_exec = os.environ.get("KOKORO_PYTHON", "python")
         
-        # Kiểm tra sự tồn tại của Kokoro-TTS
-        if not os.path.exists(self.kokoro_path):
-            logger.warning(f"Kokoro TTS not found at {self.kokoro_path}")
-        else:
-            logger.info(f"Kokoro TTS found at {self.kokoro_path}")
+        # Verify Kokoro TTS installation
+        if not self.kokoro_path.exists():
+            logger.warning(f"Creating Kokoro TTS directory at {self.kokoro_path}")
+            self.kokoro_path.mkdir(parents=True, exist_ok=True)
+        
+        # Check for required model files
+        self.model_path = self.kokoro_path / "kokoro-v1.0.onnx"
+        self.voices_path = self.kokoro_path / "voices-v1.0.bin"
+        
+        if not (self.model_path.exists() and self.voices_path.exists()):
+            logger.error("Required model files not found!")
+            logger.info("Please download the model files and place them in the kokoro-tts directory")
+            raise ValueError("Missing required Kokoro TTS model files")
             
     def generate_speech(self, text, speaker_id="default", speed=1.0):
         """Generate speech using Kokoro TTS"""
-        if not os.path.exists(self.kokoro_path):
-            raise ValueError(f"Kokoro TTS not found at {self.kokoro_path}")
-            
-        # Tạo file tạm để lưu output
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_output:
-            output_path = tmp_output.name
-            
+        if not self.kokoro_path.exists():
+            raise ValueError(f"Kokoro TTS directory not found at {self.kokoro_path}")
+        
+        # Validate text and speaker_id
+        if not text or not text.strip():
+            raise ValueError("Text cannot be empty")
+        
+        # Ensure output directory exists
+        AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+        
+        # Generate a unique filename
+        output_filename = f"kokoro_{uuid.uuid4()}.wav"
+        output_path = AUDIO_DIR / output_filename
+        
         try:
+            # Confirm the script exists
+            kokoro_script_path = self.kokoro_path / "kokoro-tts.py"
+            if not kokoro_script_path.exists():
+                raise FileNotFoundError(f"Kokoro TTS script not found at {kokoro_script_path}")
+            
             # Tạo file tạm cho text đầu vào
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as tmp_input:
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, encoding='utf-8') as tmp_input:
                 tmp_input_path = tmp_input.name
                 tmp_input.write(text)
             
             # Chuẩn bị command line arguments
             cmd = [
                 self.python_exec,
-                os.path.join(self.kokoro_path, "kokoro-tts"),
+                str(kokoro_script_path),
                 tmp_input_path,
-                output_path,
+                str(output_path),
                 "--voice", speaker_id
             ]
             
+            # Add speed parameter if not default
             if speed != 1.0:
                 cmd.extend(["--speed", str(speed)])
                 
-            logger.info(f"Running Kokoro TTS with command: {' '.join(cmd)}")
+            logger.info(f"Running Kokoro TTS with command: {' '.join(map(str, cmd))}")
+            logger.info(f"Working directory: {self.kokoro_path}")
             
             # Chạy tiến trình Kokoro-TTS
             process = subprocess.Popen(
                 cmd, 
                 stdout=subprocess.PIPE, 
                 stderr=subprocess.PIPE,
-                cwd=self.kokoro_path
+                universal_newlines=True,
+                cwd=str(self.kokoro_path)  # Convert to string for Windows compatibility
             )
-            stdout, stderr = process.communicate()
+            stdout, stderr = process.communicate(timeout=30)  # Add timeout
+            
+            # Log any output for debugging
+            if stdout:
+                logger.info(f"Kokoro TTS stdout: {stdout}")
+            if stderr:
+                logger.error(f"Kokoro TTS stderr: {stderr}")
+            
+            # Check if output file was created
+            if not output_path.exists():
+                logger.error(f"Failed to create output file. Process return code: {process.returncode}")
+                logger.error(f"Stdout: {stdout}")
+                logger.error(f"Stderr: {stderr}")
+                raise Exception(f"Failed to generate audio file. Return code: {process.returncode}")
             
             if process.returncode != 0:
-                logger.error(f"Kokoro TTS error: {stderr.decode()}")
-                raise Exception(f"Kokoro TTS failed with code {process.returncode}: {stderr.decode()}")
+                logger.error(f"Kokoro TTS process failed with return code {process.returncode}")
+                raise Exception(f"Kokoro TTS failed with code {process.returncode}")
                 
             # Đọc file audio đã tạo
-            audio_data, sample_rate = sf.read(output_path)
+            audio_data, sample_rate = sf.read(str(output_path))
             
             logger.info(f"Kokoro TTS generated audio successfully: {len(audio_data)} samples at {sample_rate}Hz")
-            return audio_data, sample_rate
             
+            # Return relative path for frontend use
+            relative_path = output_path.relative_to(BASE_DIR)
+            return audio_data, sample_rate, str(relative_path)
+            
+        except subprocess.TimeoutExpired:
+            logger.error("Kokoro TTS process timed out")
+            raise Exception("Audio generation timed out")
         except Exception as e:
             logger.error(f"Error in Kokoro TTS service: {str(e)}")
             raise
         finally:
-            # Xóa file tạm nếu tồn tại
-            if os.path.exists(output_path):
-                try:
-                    os.unlink(output_path)
-                except:
-                    pass
-            
+            # Cleanup temporary input file
             if 'tmp_input_path' in locals() and os.path.exists(tmp_input_path):
                 try:
                     os.unlink(tmp_input_path)
@@ -88,7 +124,7 @@ class KokoroTTSService:
                 
     def get_available_speakers(self):
         """Get list of available speakers from Kokoro TTS"""
-        if not os.path.exists(self.kokoro_path):
+        if not self.kokoro_path.exists():
             return [{"id": "default", "name": "Default Speaker"}]
             
         try:

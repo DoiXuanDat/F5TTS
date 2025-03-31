@@ -57,11 +57,27 @@ export const audioService = {
     return response.data;
   },
   
-  getKokoroVoices: async () => {
-    const response = await axios.get(`${BASE_URL}/kokoro-voices/`);
-    return response.data;
+  getKokoroSpeakers: async () => {
+    try {
+      const response = await axios.get(`${getBaseURL()}/kokoro-speakers/`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching Kokoro speakers:', error);
+      throw error;
+    }
+  },
+  
+  generateKokoroAudio: async (formData) => {
+    try {
+      const response = await axios.post(`${getBaseURL()}/generate-audio-kokoro/`, formData);
+      return response.data;
+    } catch (error) {
+      console.error('Error generating Kokoro audio:', error);
+      throw error;
+    }
   }
 };
+
 
 export default apiClient;
 

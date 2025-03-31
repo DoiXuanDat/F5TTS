@@ -7,7 +7,7 @@ from starlette.responses import RedirectResponse
 
 from config import AUDIO_DIR
 from api.middleware import setup_middleware
-from api.routes import audio, video, srt
+from api.routes import audio, video, srt, kokoro  # Add kokoro import
 from services.video_service import video_storage
 
 # Configure custom logging format
@@ -41,6 +41,7 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 app.include_router(audio.router, tags=["Audio Generation"])
 app.include_router(video.router, tags=["Video Management"])
 app.include_router(srt.router, tags=["SRT Generation"])
+app.include_router(kokoro.router)  # Add this line
 
 # Initialize video storage
 video_storage.load_videos()
