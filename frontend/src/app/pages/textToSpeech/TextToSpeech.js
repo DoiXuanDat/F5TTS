@@ -1,198 +1,149 @@
-import React, { useState } from "react";
-import "./TextToSpeech.css";
-import {
-  audioService,
-  combineAudioSegments,
-  generateCombinedSRT,
-} from "../../services/api";
-import {
-  formatTime,
-  createDownloadLink,
-  validateAudioFile,
-} from "../../services/audioProcessing";
-import AudioControls from "../../components/audio/AudioControls";
-import { BASE_URL } from "../../services/api";
+import React, { useState, useEffect } from 'react';
+import PropTypes from 'prop-types';
+import axios from 'axios';
+import { getBaseURL } from '../../services/api';
+import './TTSSelector.css';
 
-const TextToSpeech = ({ setIsProcessing: setParentIsProcessing }) => {
-  const [segments, setSegments] = useState([{ text: "" }]);
-  const [refText, setRefText] = useState("");
-  const [audioFile, setAudioFile] = useState(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [currentSegmentPaths, setCurrentSegmentPaths] = useState([]);
-  const [error, setError] = useState("");
-  const [finalAudioUrl, setFinalAudioUrl] = useState(null);
-  const [audioSettings, setAudioSettings] = useState({
-    speed: 0.5,
-    nfeStep: 16
-  });
-
-  const handleAddSegment = () => {
-    setSegments([...segments, { text: "" }]);
-  };
-
-  const handleRemoveSegment = (index) => {
-    const newSegments = segments.filter((_, i) => i !== index);
-    setSegments(newSegments);
-  };
-
-  const handleSegmentChange = (index, value) => {
-    const newSegments = [...segments];
-    newSegments[index].text = value;
-    setSegments(newSegments);
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setIsProcessing(true);
-    setParentIsProcessing(true);
-    setError("");
-    try {
-        const paths = [];
-        for (let i = 0; i < segments.length; i++) {
-            const formData = new FormData();
-            formData.append("ref_text", refText);
-            formData.append("gen_text", segments[i].text);
-            formData.append("ref_audio", audioFile);
-            formData.append("segment_index", i.toString());
-            formData.append("speed", audioSettings.speed.toString());
-            formData.append("nfe_step", audioSettings.nfeStep.toString());
-
-            const result = await audioService.generateAudio(formData);
-            console.log(`Segment ${i} result:`, result);
-
-            if (!result || !result.audio_path) {
-                throw new Error(`Failed to generate audio for segment ${i}`);
-            }
-
-            paths.push(result.audio_path);
-        }
-
-        console.log('Generated audio paths:', paths);
-
-        if (paths.length > 0) {
-            const combinedResult = await combineAudioSegments(paths);
-            if (combinedResult && combinedResult.path) {
-                setCurrentSegmentPaths([...paths]);
-                setFinalAudioUrl(combinedResult.path);
-            } else {
-                throw new Error('Invalid response from combine audio');
-            }
-        }
-
-    } catch (error) {
-        console.error('Error in handleSubmit:', error);
-        setError(error.message || "An error occurred");
-    } finally {
-        setIsProcessing(false);
-        setParentIsProcessing(false);
-    }
-};
-
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (!validateAudioFile(file)) {
-      setError("Please upload a valid WAV file");
-      return;
-    }
-    setAudioFile(file);
-  };
-
-  const downloadCombinedSRT = async () => {
-    try {
-      if (!currentSegmentPaths || currentSegmentPaths.length === 0) {
-        setError("No audio segments available for SRT generation");
-        return;
-      }
+const TTSSelector = ({ onProviderChange, selectedProvider, disabled }) => {
+  const [minimaxVoices, setMinimaxVoices] = useState([]);
+  const [kokoroSpeakers, setKokoroSpeakers] = useState([]);
+  const [selectedVoice, setSelectedVoice] = useState('female-voice-1');
+  const [selectedSpeaker, setSelectedSpeaker] = useState('af_sarah');
+  const [loading, setLoading] = useState(false);
   
-      console.log("Generating SRT for paths:", currentSegmentPaths);
-      
-      const response = await generateCombinedSRT(currentSegmentPaths);
-      
-      if (response && response.data) {
-        const srtBlob = new Blob([response.data], { type: 'text/plain' });
-        createDownloadLink(srtBlob, "combined.srt");
-      } else {
-        throw new Error("Invalid response from server");
+  // Fetch voices/speakers when provider changes
+  useEffect(() => {
+    if (selectedProvider === 'minimax') {
+      fetchMinimaxVoices();
+    } else if (selectedProvider === 'kokoro') {
+      fetchKokoroSpeakers();
+    }
+  }, [selectedProvider]);
+  
+  const fetchMinimaxVoices = async () => {
+    try {
+      setLoading(true);
+      const response = await axios.get(`${getBaseURL()}/minimax-voices/`);
+      if (response.data && Array.isArray(response.data)) {
+        setMinimaxVoices(response.data);
+        if (response.data.length > 0 && !response.data.find(v => v.id === selectedVoice)) {
+          setSelectedVoice(response.data[0].id);
+          onProviderChange('minimax', response.data[0].id);
+        }
       }
-    } catch (err) {
-      console.error("SRT download error:", err);
-      setError("Failed to download SRT: " + (err.message || "Unknown error"));
+    } catch (error) {
+      console.error('Error fetching MiniMax voices:', error);
+    } finally {
+      setLoading(false);
     }
   };
-
+  
+  const fetchKokoroSpeakers = async () => {
+    try {
+      setLoading(true);
+      const response = await axios.get(`${getBaseURL()}/kokoro-speakers/`);
+      if (response.data && Array.isArray(response.data)) {
+        setKokoroSpeakers(response.data);
+        if (response.data.length > 0 && !response.data.find(s => s.id === selectedSpeaker)) {
+          setSelectedSpeaker(response.data[0].id);
+          onProviderChange('kokoro', response.data[0].id);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching Kokoro speakers:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const handleProviderChange = (e) => {
+    const provider = e.target.value;
+    if (provider === 'minimax') {
+      onProviderChange(provider, selectedVoice);
+    } else if (provider === 'kokoro') {
+      onProviderChange(provider, selectedSpeaker);
+    } else {
+      onProviderChange(provider, null);
+    }
+  };
+  
+  const handleVoiceChange = (e) => {
+    const voice = e.target.value;
+    setSelectedVoice(voice);
+    if (selectedProvider === 'minimax') {
+      onProviderChange(selectedProvider, voice);
+    }
+  };
+  
+  const handleSpeakerChange = (e) => {
+    const speaker = e.target.value;
+    setSelectedSpeaker(speaker);
+    if (selectedProvider === 'kokoro') {
+      onProviderChange(selectedProvider, speaker);
+    }
+  };
+  
   return (
-    <div className="container">
-      <h1>Advanced Text-to-Speech Generator</h1>
-      <form onSubmit={handleSubmit}>
-        <TextSegmentForm
-          segments={segments}
-          refText={refText}
-          onRefTextChange={setRefText}
-          onSegmentChange={handleSegmentChange}
-          onRemoveSegment={handleRemoveSegment}
-          onAddSegment={handleAddSegment}
-          onSubmit={handleSubmit}
-        />
-        
-        <div className="form-group">
-          <label htmlFor="referenceAudio">
-            Upload Audio File (WAV format):
-          </label>
-          <input
-            type="file"
-            id="referenceAudio"
-            onChange={handleFileChange}
-            accept="audio/wav"
-            required
-          />
-        </div>
-
-        <div className="form-group">
-          <label htmlFor="speed">Speech Speed</label>
-          <div className="input-group settings-input-group">
-            <input
-              type="range"
-              id="speed"
-              min="0.1"
-              max="2.0"
-              step="0.1"
-              value={audioSettings.speed}
-              onChange={(e) => setAudioSettings(prev => ({
-                ...prev,
-                speed: parseFloat(e.target.value)
-              }))}
-            />
-            <span>{audioSettings.speed}x</span>
-          </div>
-        </div>
-
-        <button
-          type="submit"
-          className="btn generate-btn"
-          disabled={isProcessing}
+    <div className="tts-selector" data-provider={selectedProvider}>
+      <div className="provider-selector">
+        <label htmlFor="tts-provider">TTS Provider:</label>
+        <select 
+          id="tts-provider" 
+          value={selectedProvider}
+          onChange={handleProviderChange}
+          disabled={disabled}
         >
-          {isProcessing ? "Generating..." : "Generate Audio"}
-        </button>
-      </form>
-
-      {error && <div className="error">{error}</div>}
-
-      {finalAudioUrl && (
-        <div className="result">
-          <h2>Generated Audio</h2>
-          <div className="combined-audio">
-            <h3>Combined Audio</h3>
-            <AudioControls audioUrl={finalAudioUrl} />
-          </div>
-          <div className="srt-controls">
-            <button onClick={downloadCombinedSRT} className="btn srt-btn">
-              Download Combined SRT
-            </button>
-          </div>
+          <option value="f5-tts">F5-TTS (Local)</option>
+          <option value="kokoro">Kokoro-TTS (Local)</option>
+          <option value="minimax">MiniMax.io (API)</option>
+        </select>
+      </div>
+      
+      {selectedProvider === 'minimax' && (
+        <div className="voice-selector">
+          <label htmlFor="voice-selection">Voice:</label>
+          <select
+            id="voice-selection"
+            value={selectedVoice}
+            onChange={handleVoiceChange}
+            disabled={disabled || loading || minimaxVoices.length === 0}
+          >
+            {minimaxVoices.map(voice => (
+              <option key={voice.id} value={voice.id}>{voice.name}</option>
+            ))}
+          </select>
+          {loading && <span className="loading-indicator">Loading voices...</span>}
+        </div>
+      )}
+      
+      {selectedProvider === 'kokoro' && (
+        <div className="voice-selector">
+          <label htmlFor="speaker-selection">Speaker:</label>
+          <select
+            id="speaker-selection"
+            value={selectedSpeaker}
+            onChange={handleSpeakerChange}
+            disabled={disabled || loading || kokoroSpeakers.length === 0}
+          >
+            {kokoroSpeakers.map(speaker => (
+              <option key={speaker.id} value={speaker.id}>{speaker.name}</option>
+            ))}
+          </select>
+          {loading && <span className="loading-indicator">Loading speakers...</span>}
         </div>
       )}
     </div>
   );
 };
 
-export default TextToSpeech;
+TTSSelector.propTypes = {
+  onProviderChange: PropTypes.func.isRequired,
+  selectedProvider: PropTypes.string.isRequired,
+  disabled: PropTypes.bool
+};
+
+TTSSelector.defaultProps = {
+  disabled: false
+};
+
+export default TTSSelector;

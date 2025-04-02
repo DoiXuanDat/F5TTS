@@ -1,4 +1,3 @@
-// frontend/src/app/components/tts/TTSSelector.js
 import React, { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import axios from 'axios';
@@ -9,10 +8,11 @@ const TTSSelector = ({ onProviderChange, selectedProvider, disabled }) => {
   const [minimaxVoices, setMinimaxVoices] = useState([]);
   const [kokoroSpeakers, setKokoroSpeakers] = useState([]);
   const [selectedVoice, setSelectedVoice] = useState('female-voice-1');
-  const [selectedSpeaker, setSelectedSpeaker] = useState('default');
+  const [selectedSpeaker, setSelectedSpeaker] = useState('af_sarah');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   
-  // Fetch voices/speakers when provider changes
+  // Fetch voices/speakers when provider changes or component mounts
   useEffect(() => {
     if (selectedProvider === 'minimax') {
       fetchMinimaxVoices();
@@ -24,7 +24,11 @@ const TTSSelector = ({ onProviderChange, selectedProvider, disabled }) => {
   const fetchMinimaxVoices = async () => {
     try {
       setLoading(true);
+      setError(null);
+      console.log('Fetching MiniMax voices...');
       const response = await axios.get(`${getBaseURL()}/minimax-voices/`);
+      console.log('MiniMax response:', response.data);
+      
       if (response.data && Array.isArray(response.data)) {
         setMinimaxVoices(response.data);
         if (response.data.length > 0 && !response.data.find(v => v.id === selectedVoice)) {
@@ -34,6 +38,7 @@ const TTSSelector = ({ onProviderChange, selectedProvider, disabled }) => {
       }
     } catch (error) {
       console.error('Error fetching MiniMax voices:', error);
+      setError('Failed to load MiniMax voices');
     } finally {
       setLoading(false);
     }
@@ -42,16 +47,45 @@ const TTSSelector = ({ onProviderChange, selectedProvider, disabled }) => {
   const fetchKokoroSpeakers = async () => {
     try {
       setLoading(true);
+      setError(null);
+      console.log('Fetching Kokoro speakers...');
       const response = await axios.get(`${getBaseURL()}/kokoro-speakers/`);
-      if (response.data && Array.isArray(response.data)) {
+      console.log('Kokoro response:', response.data);
+      
+      if (response.data && Array.isArray(response.data) && response.data.length > 0) {
         setKokoroSpeakers(response.data);
-        if (response.data.length > 0 && !response.data.find(s => s.id === selectedSpeaker)) {
-          setSelectedSpeaker(response.data[0].id);
-          onProviderChange('kokoro', response.data[0].id);
+        // Default to first voice if current selection is not in the list
+        if (!response.data.find(s => s.id === selectedSpeaker)) {
+          const newSpeaker = response.data[0].id;
+          setSelectedSpeaker(newSpeaker);
+          onProviderChange('kokoro', newSpeaker);
+        } else {
+          // Ensure the parent component has the correct voice
+          onProviderChange('kokoro', selectedSpeaker);
         }
+      } else {
+        console.warn('Received empty or invalid Kokoro speakers list');
+        // Set a default list of voices in case the API fails
+        const defaultVoices = [
+          { id: 'af_sarah', name: 'Sarah (Female, US)' },
+          { id: 'am_adam', name: 'Adam (Male, US)' }
+        ];
+        setKokoroSpeakers(defaultVoices);
+        setSelectedSpeaker(defaultVoices[0].id);
+        onProviderChange('kokoro', defaultVoices[0].id);
       }
     } catch (error) {
       console.error('Error fetching Kokoro speakers:', error);
+      setError('Failed to load Kokoro speakers');
+      
+      // Set a default list of voices in case the API fails
+      const defaultVoices = [
+        { id: 'af_sarah', name: 'Sarah (Female, US)' },
+        { id: 'am_adam', name: 'Adam (Male, US)' }
+      ];
+      setKokoroSpeakers(defaultVoices);
+      setSelectedSpeaker(defaultVoices[0].id);
+      onProviderChange('kokoro', defaultVoices[0].id);
     } finally {
       setLoading(false);
     }
@@ -85,7 +119,7 @@ const TTSSelector = ({ onProviderChange, selectedProvider, disabled }) => {
   };
   
   return (
-    <div className="tts-selector">
+    <div className="tts-selector" data-provider={selectedProvider}>
       <div className="provider-selector">
         <label htmlFor="tts-provider">TTS Provider:</label>
         <select 
@@ -114,6 +148,7 @@ const TTSSelector = ({ onProviderChange, selectedProvider, disabled }) => {
             ))}
           </select>
           {loading && <span className="loading-indicator">Loading voices...</span>}
+          {error && <span className="error-indicator">{error}</span>}
         </div>
       )}
       
@@ -124,13 +159,18 @@ const TTSSelector = ({ onProviderChange, selectedProvider, disabled }) => {
             id="speaker-selection"
             value={selectedSpeaker}
             onChange={handleSpeakerChange}
-            disabled={disabled || loading || kokoroSpeakers.length === 0}
+            disabled={disabled || loading}
           >
-            {kokoroSpeakers.map(speaker => (
-              <option key={speaker.id} value={speaker.id}>{speaker.name}</option>
-            ))}
+            {kokoroSpeakers.length > 0 ? (
+              kokoroSpeakers.map(speaker => (
+                <option key={speaker.id} value={speaker.id}>{speaker.name}</option>
+              ))
+            ) : (
+              <option value="af_sarah">Sarah (Default)</option>
+            )}
           </select>
           {loading && <span className="loading-indicator">Loading speakers...</span>}
+          {error && <span className="error-indicator">{error}</span>}
         </div>
       )}
     </div>

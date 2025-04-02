@@ -254,104 +254,137 @@ const SubtitleEditor = ({
   }, [settingsState.dllitems]);
 
   // Audio processing handlers
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!audioState.audioFile && ttsProvider === 'f5-tts') {
-      setError("Please select a reference audio file for F5-TTS");
-      return;
-    }
+// This code snippet shows the updated part of the handleSubmit method in SubtitleEditor.js
+// Replace or modify your existing handleSubmit method with this code
+
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  if (!audioState.audioFile && ttsProvider === 'f5-tts') {
+    setError("Please select a reference audio file for F5-TTS");
+    return;
+  }
+
+  setAudioState(prev => ({ ...prev, isProcessing: true }));
+  setParentIsProcessing(true);
+  setError("");
   
-    setAudioState(prev => ({ ...prev, isProcessing: true }));
-    setParentIsProcessing(true);
-    setError("");
+  try {
+    const videoResponse = await axios.post(`${getBaseURL()}/videos/`, {
+      title: "New Video",
+      audioPath: "",
+    });
     
-    try {
-      const videoResponse = await axios.post(`${getBaseURL()}/videos/`, {
-        title: "New Video",
-        audioPath: "",
-      });
+    const videoId = videoResponse.data.id;
+    const paths = [];
+
+    for (const subtitle of editorState.subtitles) {
+      if (!subtitle.text.trim()) continue;
       
-      const videoId = videoResponse.data.id;
-      const paths = [];
-  
-      for (const subtitle of editorState.subtitles) {
-        if (!subtitle.text.trim()) continue;
-        
-        let result;
-        const formData = new FormData();
-        
-        switch(ttsProvider) {
-          case 'f5-tts':
-            formData.append("ref_text", audioState.refText);
-            formData.append("gen_text", subtitle.text);
-            formData.append("ref_audio", audioState.audioFile);
-            formData.append("speed", audioSettings.speed.toString());
-            result = await audioService.generateAudio(formData);
-            break;
-  
-            case 'kokoro':
-              // Create form data for Kokoro TTS
-              const kokoroFormData = new FormData();
-              kokoroFormData.append("text", subtitle.text);
-              kokoroFormData.append("speaker_id", voiceOrSpeaker || 'default');
-              kokoroFormData.append("speed", audioSettings.speed.toString());
-              
-              // Generate audio using Kokoro TTS endpoint
-              try {
-                const kokoroResponse = await axios.post(
-                  `${getBaseURL()}/generate-audio-kokoro/`, 
-                  kokoroFormData,
-                  {
-                    headers: {
-                      'Content-Type': 'multipart/form-data'
-                    }
-                  }
-                );
-                
-                // Verify the response contains the audio path
-                if (kokoroResponse.data && kokoroResponse.data.audio_path) {
-                  result = kokoroResponse.data;
-                  console.log('Kokoro TTS audio generated:', result.audio_path);
-                } else {
-                  console.error('Kokoro TTS response missing audio path:', kokoroResponse.data);
-                  throw new Error('Failed to generate Kokoro TTS audio');
+      let result;
+      const formData = new FormData();
+      
+      switch(ttsProvider) {
+        case 'f5-tts':
+          formData.append("ref_text", audioState.refText);
+          formData.append("gen_text", subtitle.text);
+          formData.append("ref_audio", audioState.audioFile);
+          formData.append("speed", audioSettings.speed.toString());
+          result = await audioService.generateAudio(formData);
+          break;
+
+        case 'kokoro':
+          // Create form data for Kokoro TTS
+          const kokoroFormData = new FormData();
+          kokoroFormData.append("text", subtitle.text);
+          kokoroFormData.append("speaker_id", voiceOrSpeaker || 'af_sarah');
+          kokoroFormData.append("speed", audioSettings.speed.toString());
+          
+          // Generate audio using Kokoro TTS endpoint
+          try {
+            const kokoroResponse = await axios.post(
+              `${getBaseURL()}/generate-audio-kokoro/`, 
+              kokoroFormData,
+              {
+                headers: {
+                  'Content-Type': 'multipart/form-data'
                 }
-              } catch (error) {
-                console.error('Kokoro TTS generation error:', error);
-                throw error;
               }
-              break;
-        }
-        
-        if (result?.audio_path) {
-          paths.push(result.audio_path);
-        }
+            );
+            
+            // Verify the response contains the audio path
+            if (kokoroResponse.data && kokoroResponse.data.audio_path) {
+              result = kokoroResponse.data;
+              console.log('Kokoro TTS audio generated:', result.audio_path);
+            } else {
+              console.error('Kokoro TTS response missing audio path:', kokoroResponse.data);
+              throw new Error('Failed to generate Kokoro TTS audio');
+            }
+          } catch (error) {
+            console.error('Kokoro TTS generation error:', error);
+            throw error;
+          }
+          break;
+          
+        case 'minimax':
+          // Create form data for MiniMax TTS
+          const minimaxFormData = new FormData();
+          minimaxFormData.append("text", subtitle.text);
+          minimaxFormData.append("voice_id", voiceOrSpeaker || 'female-voice-1');
+          minimaxFormData.append("speed", audioSettings.speed.toString());
+          
+          // Generate audio using MiniMax TTS endpoint
+          try {
+            const minimaxResponse = await axios.post(
+              `${getBaseURL()}/generate-audio-minimax/`, 
+              minimaxFormData,
+              {
+                headers: {
+                  'Content-Type': 'multipart/form-data'
+                }
+              }
+            );
+            
+            if (minimaxResponse.data && minimaxResponse.data.audio_path) {
+              result = minimaxResponse.data;
+            } else {
+              throw new Error('Failed to generate MiniMax TTS audio');
+            }
+          } catch (error) {
+            console.error('MiniMax TTS generation error:', error);
+            throw error;
+          }
+          break;
       }
-  
-      if (paths.length > 0) {
-        const combinedResult = await combineAudioSegments(paths);
-        if (combinedResult?.path) {
-          await axios.patch(`${getBaseURL()}/videos/${videoId}`, {
-            url: combinedResult.path,
-            status: VideoStatus.COMPLETED
-          });
-  
-          onGenerationComplete({
-            videoId,
-            audioUrl: combinedResult.path,
-            duration: combinedResult.duration || 0,
-            paths
-          });
-        }
+      
+      if (result?.audio_path) {
+        paths.push(result.audio_path);
       }
-    } catch (error) {
-      console.error('Error in handleSubmit:', error);
-      setError(error.message || "An error occurred during audio generation");
-    } finally {
-      setAudioState(prev => ({ ...prev, isProcessing: false }));
-      setParentIsProcessing(false);
     }
-  };
+
+    if (paths.length > 0) {
+      const combinedResult = await combineAudioSegments(paths);
+      if (combinedResult?.path) {
+        await axios.patch(`${getBaseURL()}/videos/${videoId}`, {
+          url: combinedResult.path,
+          status: VideoStatus.COMPLETED
+        });
+
+        onGenerationComplete({
+          videoId,
+          audioUrl: combinedResult.path,
+          duration: combinedResult.duration || 0,
+          paths
+        });
+      }
+    }
+  } catch (error) {
+    console.error('Error in handleSubmit:', error);
+    setError(error.message || "An error occurred during audio generation");
+  } finally {
+    setAudioState(prev => ({ ...prev, isProcessing: false }));
+    setParentIsProcessing(false);
+  }
+};
 
   // Effect for processing subtitle text
   useEffect(() => {

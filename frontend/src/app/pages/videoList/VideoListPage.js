@@ -16,20 +16,7 @@ const VideoListPage = () => {
     try {
       const response = await axios.get(`${getBaseURL()}/videos/`);
       if (Array.isArray(response.data)) {
-        // Transform video data to include proper status and metadata
-        const updatedVideos = response.data.map(video => ({
-          ...video,
-          metadata: {
-            ...video.metadata,
-            source: video.metadata?.source || 
-              (video.audio_path?.includes('kokoro') ? 'kokoro' : 'f5-tts')
-          },
-          status: video.status || 
-            (video.audio_path ? 'completed' : 'pending')
-        }));
-        setVideos(updatedVideos);
-      } else {
-        setVideos([]);
+        setVideos(response.data);
       }
       setLoading(false);
     } catch (err) {
@@ -39,18 +26,25 @@ const VideoListPage = () => {
   };
 
   useEffect(() => {
+    // Initial fetch
     fetchVideos();
+
+    // Set up polling with longer interval and only for processing videos
     const interval = setInterval(() => {
-      // Only poll if there are pending or processing videos
+      // Only poll if there are videos in processing state
       const hasProcessingVideos = videos.some(
-        v => v.status === 'pending' || v.status === 'processing'
+        video => video.status === 'pending' || 
+                video.status === 'processing' ||
+                video.status === 'kokoro-processing'
       );
+
       if (hasProcessingVideos) {
         fetchVideos();
       }
-    }, 5000); // Poll every 5 seconds instead of 30
+    }, 5000); // Changed from default to 5 seconds
+
     return () => clearInterval(interval);
-  }, [videos]);
+  }, [videos]); // Added videos dependency
 
   const handleCopyUrl = (url) => {
     navigator.clipboard.writeText(url);

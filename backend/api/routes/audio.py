@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from typing import List
 from services.minimax_tts_service import minimax_tts_service
 import base64
-from services.kokoro_tts_service import kokoro_tts_service
+from services.official_kokoro_tts_service import official_kokoro_tts_service
 import soundfile as sf
 
 from config import AUDIO_DIR, logger
@@ -18,6 +18,7 @@ from services.video_service import VideoStorage
 from utils.audio import validate_audio_file, get_audio_duration
 from utils.file_helpers import generate_unique_filename, save_metadata
 from pydub import AudioSegment
+
 
 router = APIRouter()
 video_storage = VideoStorage()
@@ -392,14 +393,14 @@ async def generate_audio_kokoro(
         output_filename = generate_unique_filename()
         output_path = AUDIO_DIR / f"{output_filename}.wav"
         
-        # Generate audio using Kokoro service
-        audio_data, sample_rate = kokoro_tts_service.generate_speech(
+        # Generate audio using DIRECT Kokoro service (updated)
+        audio_data, sample_rate, relative_path = official_kokoro_tts_service.generate_speech(
             text=text,
             speaker_id=speaker_id,
             speed=speed
         )
         
-        # Save the audio file
+        # Save the audio file - if needed, it should already be saved by the direct service
         sf.write(str(output_path), audio_data, sample_rate)
             
         processing_time = time.time() - start_time
@@ -443,7 +444,8 @@ async def generate_audio_kokoro(
 async def get_kokoro_speakers():
     """Get available speakers from Kokoro TTS service"""
     try:
-        speakers = kokoro_tts_service.get_available_speakers()
+        # Use the direct service instead
+        speakers = official_kokoro_tts_service.get_available_speakers()
         return speakers
     except Exception as e:
         logger.error(f"Error getting Kokoro speakers: {str(e)}", exc_info=True)

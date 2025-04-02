@@ -41,7 +41,7 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 app.include_router(audio.router, tags=["Audio Generation"])
 app.include_router(video.router, tags=["Video Management"])
 app.include_router(srt.router, tags=["SRT Generation"])
-app.include_router(kokoro.router)  # Add this line
+app.include_router(kokoro.router, tags=["Kokoro TTS"])  # Add kokoro router
 
 # Initialize video storage
 video_storage.load_videos()
@@ -61,7 +61,8 @@ async def root():
             "audio": "/generate-audio/",
             "combine_audio": "/combine-audio",
             "video_management": "/videos/",
-            "srt_generation": "/generate-combined-srt"
+            "srt_generation": "/generate-combined-srt",
+            "kokoro_tts": "/generate-audio-kokoro/"
         }
     }
 
