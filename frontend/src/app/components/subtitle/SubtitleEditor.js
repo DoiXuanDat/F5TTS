@@ -1,23 +1,20 @@
+// frontend/src/app/components/subtitle/SubtitleEditor.js
+
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import PropTypes from "prop-types";
 import axios from 'axios';
 import { getBaseURL } from '../../services/api';
-import { VideoStatus, VideoTypes } from '../../types/video';
+import { VideoStatus } from '../../types/video';
 import FilePicker from "../common/filePicker/FilePicker";
 import SubtitleList from "./SubtitleList";
 import TTSSelector from '../tts/TTSSelector';
-// import Settings from "../common/settings/Settings";
 import AudioControls from "../audio/AudioControls";
 import {
   audioService,
   combineAudioSegments,
   generateCombinedSRT,
+  downloadSRTContent 
 } from "../../services/api";
-import {
-  formatTime,
-  createDownloadLink,
-  validateAudioFile,
-} from "../../services/audioProcessing";
 import "./SubtitleEditor.css";
 
 const DEFAULT_IMAGES = [
@@ -27,8 +24,14 @@ const DEFAULT_IMAGES = [
   require("../../assets/images/33.png"),
 ];
 
+// Utility function to split text into paragraphs by double line breaks
+const splitTextIntoParagraphs = (text) => {
+  return text.split('\n\n').filter(paragraph => paragraph.trim());
+};
+
 const SubtitleEditor = ({
-  subtitleText,
+  subtitleSegments,
+  onSegmentsUpdate,
   setIsProcessing: setParentIsProcessing,
   onGenerationComplete
 }) => {
@@ -41,11 +44,24 @@ const SubtitleEditor = ({
   };
 
   const [editorState, setEditorState] = useState({
-    subtitles: [],
+    subtitles: subtitleSegments || [{ id: Date.now(), text: "", image: DEFAULT_IMAGES[0] }],
     imageList: DEFAULT_IMAGES,
     selectedId: null,
     isPickerOpen: false,
   });
+
+  // Update local subtitles when props change
+  useEffect(() => {
+    if (subtitleSegments && subtitleSegments.length > 0) {
+      setEditorState(prev => ({
+        ...prev,
+        subtitles: subtitleSegments.map(segment => ({
+          ...segment,
+          image: segment.image || DEFAULT_IMAGES[0]
+        }))
+      }));
+    }
+  }, [subtitleSegments]);
 
   const [settingsState, setSettingsState] = useState({
     noTextTime: 0,
@@ -57,12 +73,15 @@ const SubtitleEditor = ({
 
   const [audioState, setAudioState] = useState({
     segments: [{ text: "", duration: null }],
-    refText: "", // Make sure this is initialized
+    refText: "", 
     audioFile: null,
     isProcessing: false,
+    isProcessingDownload: false,
     currentSegmentPaths: [],
     showTiming: false,
     finalAudioUrl: null,
+    // Add a new property to store paragraph information for SRT generation
+    paragraphData: []
   });
 
   const [audioSettings, setAudioSettings] = useState({
@@ -71,6 +90,13 @@ const SubtitleEditor = ({
   });
 
   const [error, setError] = useState("");
+
+  // Send updates back to parent component
+  useEffect(() => {
+    if (onSegmentsUpdate && editorState.subtitles) {
+      onSegmentsUpdate(editorState.subtitles);
+    }
+  }, [editorState.subtitles, onSegmentsUpdate]);
 
   // Memoized handlers
   const handleImageClick = useCallback((id) => {
@@ -91,15 +117,21 @@ const SubtitleEditor = ({
     }));
   }, []);
 
-  //check bug
+  // FIXED: updateSubtitle no longer creates new subtitle elements
   const updateSubtitle = useCallback((id, newText) => {
-    console.log("updateSubtitle called:", id, newText);
-    setEditorState((prev) => ({
-      ...prev,
-      subtitles: prev.subtitles.map((subtitle) =>
-        subtitle.id === id ? { ...subtitle, text: newText } : subtitle
-      ),
-    }));
+    setEditorState((prev) => {
+      const subtitles = prev.subtitles.map((subtitle) => {
+        if (subtitle.id === id) {
+          return { ...subtitle, text: newText };
+        }
+        return subtitle;
+      });
+      
+      return {
+        ...prev,
+        subtitles: subtitles
+      };
+    });
   }, []);
 
   const updateImageList = useCallback((newList) => {
@@ -145,21 +177,34 @@ const SubtitleEditor = ({
   const splitSubtitle = useCallback((id, secondPart, index) => {
     setEditorState((prev) => {
       const newSubtitles = [...prev.subtitles];
-      newSubtitles.splice(index, 0, {
+      // Update the current subtitle with the first part
+      newSubtitles[index] = {
+        ...newSubtitles[index],
+        text: newSubtitles[index].text.substring(0, newSubtitles[index].text.length - secondPart.length).trim()
+      };
+      
+      // Insert the new subtitle with the second part
+      newSubtitles.splice(index + 1, 0, {
         id: `${Date.now()}-${index}`,
-        text: secondPart,
-        image: prev.imageList[index % prev.imageList.length],
+        text: secondPart.trim(),
+        image: prev.imageList[(index + 1) % prev.imageList.length],
       });
+      
       return { ...prev, subtitles: newSubtitles };
     });
   }, []);
 
   const handleFileChange = useCallback((e) => {
     const file = e.target.files[0];
-    if (!validateAudioFile(file)) {
+    if (!file) return;
+    
+    // Check if it's an audio file
+    const validAudioTypes = ['audio/wav'];
+    if (!validAudioTypes.includes(file.type)) {
       setError("Please upload a valid WAV file");
       return;
     }
+    
     setAudioState((prev) => ({ ...prev, audioFile: file }));
   }, []);
 
@@ -170,238 +215,212 @@ const SubtitleEditor = ({
         return;
       }
 
+      console.log("Attempting to generate SRT for paths:", audioState.currentSegmentPaths);
+      setAudioState(prev => ({ ...prev, isProcessingDownload: true }));
+
+      // Pass both audio paths and paragraph data for more accurate SRT generation
       const response = await generateCombinedSRT(
-        audioState.currentSegmentPaths
+        audioState.currentSegmentPaths, 
+        audioState.paragraphData
       );
+      
       if (response?.data) {
-        const srtBlob = new Blob([response.data], { type: "text/plain" });
-        createDownloadLink(srtBlob, "combined.srt");
+        console.log("SRT generation successful");
+        
+        if (response.data instanceof Blob) {
+          // If response is already a Blob
+          const url = URL.createObjectURL(response.data);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = "combined.srt";
+          document.body.appendChild(a);
+          a.click();
+          URL.revokeObjectURL(url);
+          a.remove();
+        } else if (typeof response.data === 'string') {
+          // If response is a string
+          const srtBlob = new Blob([response.data], { type: "text/plain" });
+          const url = URL.createObjectURL(srtBlob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = "combined.srt";
+          document.body.appendChild(a);
+          a.click();
+          URL.revokeObjectURL(url);
+          a.remove();
+        } else {
+          // For any other type of response
+          console.log("Unexpected SRT response type:", typeof response.data);
+          downloadSRTContent(response.data, "combined.srt");
+        }
+      } else {
+        throw new Error("Invalid or empty response from server");
       }
     } catch (error) {
+      console.error("SRT download error:", error);
       setError(error.message || "Failed to generate SRT");
+    } finally {
+      setAudioState(prev => ({ ...prev, isProcessingDownload: false }));
     }
-  }, [audioState.currentSegmentPaths]);
+  }, [audioState.currentSegmentPaths, audioState.paragraphData]);
 
-  const processAudioSegments = useCallback(async () => {
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!audioState.audioFile && ttsProvider === 'f5-tts') {
+      setError("Please select a reference audio file for F5-TTS");
+      return;
+    }
+
+    setAudioState(prev => ({ ...prev, isProcessing: true }));
+    setParentIsProcessing(true);
+    setError("");
+    
     try {
-      setAudioState(prev => ({ ...prev, isProcessing: true }));
+      const videoResponse = await axios.post(`${getBaseURL()}/videos/`, {
+        title: "New Video",
+        audioPath: "",
+      });
       
-      // First generate audio for each segment
+      const videoId = videoResponse.data.id;
       const paths = [];
+      const paragraphData = []; // To keep track of paragraph info for SRT
+
+      // Get the reference text from the first subtitle
+      const refText = editorState.subtitles[0]?.text || "";
+
+      // Process each subtitle
       for (const subtitle of editorState.subtitles) {
         if (!subtitle.text.trim()) continue;
         
-        const formData = new FormData();
-        formData.append("ref_text", audioState.refText);
-        formData.append("gen_text", subtitle.text);
-        formData.append("ref_audio", audioState.audioFile);
+        // Split text by double line breaks to handle paragraphs
+        const paragraphs = splitTextIntoParagraphs(subtitle.text);
         
-        const result = await audioService.generateAudio(formData);
-        if (result?.audio_path) {
-          paths.push(result.audio_path);
+        // If no paragraphs found (no double line breaks), treat the entire text as one paragraph
+        const textsToProcess = paragraphs.length > 0 ? paragraphs : [subtitle.text];
+        
+        // Process each paragraph within this subtitle
+        for (const paragraphText of textsToProcess) {
+          let result;
+          const formData = new FormData();
+          
+          switch(ttsProvider) {
+            case 'f5-tts':
+              formData.append("ref_text", refText);
+              formData.append("gen_text", paragraphText);
+              formData.append("ref_audio", audioState.audioFile);
+              formData.append("speed", audioSettings.speed.toString());
+              result = await audioService.generateAudio(formData);
+              break;
+
+            case 'kokoro':
+              // Create form data for Kokoro TTS
+              const kokoroFormData = new FormData();
+              kokoroFormData.append("text", paragraphText);
+              kokoroFormData.append("speaker_id", voiceOrSpeaker || 'af_sarah');
+              kokoroFormData.append("speed", audioSettings.speed.toString());
+              
+              // Generate audio using Kokoro TTS endpoint
+              try {
+                const kokoroResponse = await axios.post(
+                  `${getBaseURL()}/generate-audio-kokoro/`, 
+                  kokoroFormData,
+                  {
+                    headers: {
+                      'Content-Type': 'multipart/form-data'
+                    }
+                  }
+                );
+                
+                // Verify the response contains the audio path
+                if (kokoroResponse.data && kokoroResponse.data.audio_path) {
+                  result = kokoroResponse.data;
+                  console.log('Kokoro TTS audio generated:', result.audio_path);
+                } else {
+                  console.error('Kokoro TTS response missing audio path:', kokoroResponse.data);
+                  throw new Error('Failed to generate Kokoro TTS audio');
+                }
+              } catch (error) {
+                console.error('Kokoro TTS generation error:', error);
+                throw error;
+              }
+              break;
+              
+            case 'minimax':
+              // Create form data for MiniMax TTS
+              const minimaxFormData = new FormData();
+              minimaxFormData.append("text", paragraphText);
+              minimaxFormData.append("voice_id", voiceOrSpeaker || 'female-voice-1');
+              minimaxFormData.append("speed", audioSettings.speed.toString());
+              
+              // Generate audio using MiniMax TTS endpoint
+              try {
+                const minimaxResponse = await axios.post(
+                  `${getBaseURL()}/generate-audio-minimax/`, 
+                  minimaxFormData,
+                  {
+                    headers: {
+                      'Content-Type': 'multipart/form-data'
+                    }
+                  }
+                );
+                
+                if (minimaxResponse.data && minimaxResponse.data.audio_path) {
+                  result = minimaxResponse.data;
+                } else {
+                  throw new Error('Failed to generate MiniMax TTS audio');
+                }
+              } catch (error) {
+                console.error('MiniMax TTS generation error:', error);
+                throw error;
+              }
+              break;
+          }
+          
+          if (result?.audio_path) {
+            paths.push(result.audio_path);
+            // Store paragraph data for SRT generation
+            paragraphData.push({
+              text: paragraphText,
+              audioPath: result.audio_path,
+              duration: result.duration || 0
+            });
+          }
         }
       }
-  
-      // Then combine the audio segments
+
       if (paths.length > 0) {
-        const result = await combineAudioSegments(paths);
-        if (result?.path) {
+        const combinedResult = await combineAudioSegments(paths);
+        if (combinedResult?.path) {
+          await axios.patch(`${getBaseURL()}/videos/${videoId}`, {
+            url: combinedResult.path,
+            status: VideoStatus.COMPLETED
+          });
+
+          // Update state with paths, paragraph data, and final URL
           setAudioState(prev => ({
             ...prev,
             currentSegmentPaths: paths,
-            finalAudioUrl: result.path
+            paragraphData: paragraphData,
+            finalAudioUrl: combinedResult.path
           }));
-          
-          // Log the audio URL for debugging
-          console.log('Final audio URL:', result.path);
+
+          onGenerationComplete({
+            videoId,
+            audioUrl: combinedResult.path,
+            duration: combinedResult.duration || 0,
+            paths,
+            paragraphData
+          });
         }
       }
     } catch (error) {
-      console.error('Error processing audio segments:', error);
-      setError(error.message || 'Failed to process audio segments');
+      console.error('Error in handleSubmit:', error);
+      setError(error.message || "An error occurred during audio generation");
     } finally {
       setAudioState(prev => ({ ...prev, isProcessing: false }));
+      setParentIsProcessing(false);
     }
-  }, [editorState.subtitles, audioState.refText, audioState.audioFile]);
-
-  const splitSentences = useCallback(() => {
-    try {
-      const regex = new RegExp(settingsState.splitBy, "g");
-      setEditorState((prev) => ({
-        ...prev,
-        subtitles: prev.subtitles.map((subtitle) => ({
-          ...subtitle,
-          text: subtitle.text.replace(regex, "$1\n"),
-        })),
-      }));
-    } catch (error) {
-      setError("Invalid regex pattern");
-    }
-  }, [settingsState.splitBy]);
-
-  const deleteSpecialCharacter = useCallback(() => {
-    const pattern = new RegExp(
-      `[${settingsState.dllitems.replace(/\s/g, "")}]`,
-      "g"
-    );
-    setEditorState((prev) => ({
-      ...prev,
-      subtitles: prev.subtitles.map((subtitle) => ({
-        ...subtitle,
-        text: subtitle.text.replace(pattern, ""),
-      })),
-    }));
-  }, [settingsState.dllitems]);
-
-  // Audio processing handlers
-// This code snippet shows the updated part of the handleSubmit method in SubtitleEditor.js
-// Replace or modify your existing handleSubmit method with this code
-
-const handleSubmit = async (e) => {
-  e.preventDefault();
-  if (!audioState.audioFile && ttsProvider === 'f5-tts') {
-    setError("Please select a reference audio file for F5-TTS");
-    return;
-  }
-
-  setAudioState(prev => ({ ...prev, isProcessing: true }));
-  setParentIsProcessing(true);
-  setError("");
-  
-  try {
-    const videoResponse = await axios.post(`${getBaseURL()}/videos/`, {
-      title: "New Video",
-      audioPath: "",
-    });
-    
-    const videoId = videoResponse.data.id;
-    const paths = [];
-
-    for (const subtitle of editorState.subtitles) {
-      if (!subtitle.text.trim()) continue;
-      
-      let result;
-      const formData = new FormData();
-      
-      switch(ttsProvider) {
-        case 'f5-tts':
-          formData.append("ref_text", audioState.refText);
-          formData.append("gen_text", subtitle.text);
-          formData.append("ref_audio", audioState.audioFile);
-          formData.append("speed", audioSettings.speed.toString());
-          result = await audioService.generateAudio(formData);
-          break;
-
-        case 'kokoro':
-          // Create form data for Kokoro TTS
-          const kokoroFormData = new FormData();
-          kokoroFormData.append("text", subtitle.text);
-          kokoroFormData.append("speaker_id", voiceOrSpeaker || 'af_sarah');
-          kokoroFormData.append("speed", audioSettings.speed.toString());
-          
-          // Generate audio using Kokoro TTS endpoint
-          try {
-            const kokoroResponse = await axios.post(
-              `${getBaseURL()}/generate-audio-kokoro/`, 
-              kokoroFormData,
-              {
-                headers: {
-                  'Content-Type': 'multipart/form-data'
-                }
-              }
-            );
-            
-            // Verify the response contains the audio path
-            if (kokoroResponse.data && kokoroResponse.data.audio_path) {
-              result = kokoroResponse.data;
-              console.log('Kokoro TTS audio generated:', result.audio_path);
-            } else {
-              console.error('Kokoro TTS response missing audio path:', kokoroResponse.data);
-              throw new Error('Failed to generate Kokoro TTS audio');
-            }
-          } catch (error) {
-            console.error('Kokoro TTS generation error:', error);
-            throw error;
-          }
-          break;
-          
-        case 'minimax':
-          // Create form data for MiniMax TTS
-          const minimaxFormData = new FormData();
-          minimaxFormData.append("text", subtitle.text);
-          minimaxFormData.append("voice_id", voiceOrSpeaker || 'female-voice-1');
-          minimaxFormData.append("speed", audioSettings.speed.toString());
-          
-          // Generate audio using MiniMax TTS endpoint
-          try {
-            const minimaxResponse = await axios.post(
-              `${getBaseURL()}/generate-audio-minimax/`, 
-              minimaxFormData,
-              {
-                headers: {
-                  'Content-Type': 'multipart/form-data'
-                }
-              }
-            );
-            
-            if (minimaxResponse.data && minimaxResponse.data.audio_path) {
-              result = minimaxResponse.data;
-            } else {
-              throw new Error('Failed to generate MiniMax TTS audio');
-            }
-          } catch (error) {
-            console.error('MiniMax TTS generation error:', error);
-            throw error;
-          }
-          break;
-      }
-      
-      if (result?.audio_path) {
-        paths.push(result.audio_path);
-      }
-    }
-
-    if (paths.length > 0) {
-      const combinedResult = await combineAudioSegments(paths);
-      if (combinedResult?.path) {
-        await axios.patch(`${getBaseURL()}/videos/${videoId}`, {
-          url: combinedResult.path,
-          status: VideoStatus.COMPLETED
-        });
-
-        onGenerationComplete({
-          videoId,
-          audioUrl: combinedResult.path,
-          duration: combinedResult.duration || 0,
-          paths
-        });
-      }
-    }
-  } catch (error) {
-    console.error('Error in handleSubmit:', error);
-    setError(error.message || "An error occurred during audio generation");
-  } finally {
-    setAudioState(prev => ({ ...prev, isProcessing: false }));
-    setParentIsProcessing(false);
-  }
-};
-
-  // Effect for processing subtitle text
-  useEffect(() => {
-    if (subtitleText) {
-      const paragraphs = subtitleText
-        .split("\n\n")
-        .filter((p) => p.trim() !== "");
-
-      const newSubtitles = paragraphs.map((paragraph, index) => ({
-        id: `${Date.now()}-${index}`,
-        text: paragraph.trim(),
-        image: editorState.imageList[index % editorState.imageList.length],
-      }));
-
-      setEditorState((prev) => ({ ...prev, subtitles: newSubtitles }));
-    }
-  }, [subtitleText]);
+  };
 
   useEffect(() => {
     if (editorState.subtitles.length > 0) {
@@ -415,19 +434,72 @@ const handleSubmit = async (e) => {
     }
   }, [editorState.subtitles]);
 
-  // Add useEffect to update refText when subtitleText changes
-  useEffect(() => {
-    if (subtitleText) {
-      setAudioState(prev => ({
-        ...prev,
-        refText: subtitleText
+  const splitSentences = useCallback(() => {
+    try {
+      const regex = new RegExp("([.!?。！？]+[\\s]*)", "g");
+      const updatedSubtitles = editorState.subtitles.map(subtitle => ({
+        ...subtitle,
+        text: subtitle.text.replace(regex, "$1\n\n")
       }));
+      setEditorState(prev => ({ ...prev, subtitles: updatedSubtitles }));
+    } catch (error) {
+      console.error("Split sentences error:", error);
+      setError("Failed to split sentences");
     }
-  }, [subtitleText]);
+  }, [editorState.subtitles]);
+
+  const deleteSpecialCharacter = useCallback(() => {
+    try {
+      const chars = settingsState.dllitems.replace(/\s/g, "");
+      const regex = new RegExp(`[${chars}]`, "g");
+      const updatedSubtitles = editorState.subtitles.map(subtitle => ({
+        ...subtitle,
+        text: subtitle.text.replace(regex, "")
+      }));
+      setEditorState(prev => ({ ...prev, subtitles: updatedSubtitles }));
+    } catch (error) {
+      console.error("Delete special characters error:", error);
+      setError("Failed to remove special characters");
+    }
+  }, [editorState.subtitles, settingsState.dllitems]);
+
+  const handleDownloadSRT = useCallback(async () => {
+    try {
+      if (!audioState.currentSegmentPaths?.length) {
+        setError("No audio segments available");
+        return;
+      }
+
+      setAudioState(prev => ({ ...prev, isProcessingDownload: true }));
+
+      // Pass both paths and paragraph data
+      const response = await generateCombinedSRT(
+        audioState.currentSegmentPaths,
+        audioState.paragraphData
+      );
+      
+      if (response?.data) {
+        const success = await downloadSRTContent(response.data, "combined.srt");
+        if (!success) {
+          throw new Error("Failed to download SRT file");
+        }
+      } else {
+        throw new Error("Invalid response from server");
+      }
+    } catch (error) {
+      console.error("SRT download error:", error);
+      setError(error.message || "Failed to generate SRT");
+    } finally {
+      setAudioState(prev => ({ ...prev, isProcessingDownload: false }));
+    }
+  }, [audioState.currentSegmentPaths, audioState.paragraphData]);
 
   // Render methods
   const renderAudioControls = useMemo(() => {
     if (!audioState.finalAudioUrl) return null;
+
+    console.log("Rendering audio controls with URL:", audioState.finalAudioUrl);
+    console.log("Current segment paths:", audioState.currentSegmentPaths);
 
     return (
       <div className="result">
@@ -436,14 +508,22 @@ const handleSubmit = async (e) => {
           <h3>Combined Audio</h3>
           <AudioControls audioUrl={audioState.finalAudioUrl} />
         </div>
-        <div className="srt-controls">
-          <button onClick={downloadCombinedSRT} className="btn srt-btn">
-            Download Combined SRT
+        
+        {/* Always show SRT button when finalAudioUrl exists */}
+        <div className="srt-controls" style={{ marginTop: '1rem' }}>
+          <button 
+            onClick={handleDownloadSRT} 
+            className="btn btn-success"
+            disabled={audioState.isProcessingDownload || !audioState.currentSegmentPaths.length}
+          >
+            {audioState.isProcessingDownload ? 
+              "Generating SRT..." : 
+              "Download SRT Subtitles"}
           </button>
         </div>
       </div>
     );
-  }, [audioState.finalAudioUrl]);
+  }, [audioState.finalAudioUrl, audioState.currentSegmentPaths, audioState.isProcessingDownload, handleDownloadSRT]);
 
   return (
     <div className="subtitle-editor">
@@ -633,7 +713,7 @@ const handleSubmit = async (e) => {
         <button
           onClick={handleSubmit}
           type="button"
-          className="generate-btn"
+          className={`generate-btn ${audioState.isProcessing ? 'processing' : ''}`}
           disabled={audioState.isProcessing || (ttsProvider === 'f5-tts' && !audioState.audioFile)}
         >
           {audioState.isProcessing ? "Generating..." : "Generate Audio"}
@@ -644,9 +724,21 @@ const handleSubmit = async (e) => {
 };
 
 SubtitleEditor.propTypes = {
-  subtitleText: PropTypes.string,
+  subtitleSegments: PropTypes.arrayOf(
+    PropTypes.shape({
+      id: PropTypes.string,
+      text: PropTypes.string,
+      image: PropTypes.string
+    })
+  ),
+  onSegmentsUpdate: PropTypes.func,
   setIsProcessing: PropTypes.func.isRequired,
-  initialRefText: PropTypes.string,
   onGenerationComplete: PropTypes.func.isRequired
 };
+
+SubtitleEditor.defaultProps = {
+  subtitleSegments: [{ id: Date.now().toString(), text: "", image: null }],
+  onSegmentsUpdate: () => {}
+};
+
 export default SubtitleEditor;

@@ -103,47 +103,195 @@ export const combineAudioSegments = async (paths) => {
   }
 };
 
-export const generateSRT = async (audioPath) => {
-    try {
-        const response = await axios.post(`${getBaseURL()}/generate-srt`, 
-            { audioPath },
-            { responseType: 'blob' }
-        );
-        return response.data;
-    } catch (error) {
-        throw handleApiError(error);
-    }
-};
-
-export const generateCombinedSRT = async (paths) => {
+export const generateCombinedSRT = async (paths, paragraphData = []) => {
   try {
+    console.log('Generating SRT for paths:', paths);
+    
     const response = await axios.post(
       `${getBaseURL()}/generate-combined-srt`,
-      { audio_paths: paths },
+      { 
+        audio_paths: paths,
+        paragraph_data: paragraphData  // Pass paragraph data if available
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        }
+        // Note: Don't set responseType to 'blob' initially to check the actual response
+      }
+    );
+    
+    // Log the response to debug
+    console.log('SRT generation response type:', typeof response.data);
+    console.log('SRT generation content-type:', response.headers['content-type']);
+    
+    // If the response is already text, we can process it here to add sequence numbers
+    if (typeof response.data === 'string') {
+      // Replace "None" with sequential numbers
+      const lines = response.data.split('\n');
+      let subtitleNumber = 1;
+      const processedLines = [];
+      
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].trim() === 'None') {
+          processedLines.push(String(subtitleNumber));
+          subtitleNumber++;
+        } else {
+          processedLines.push(lines[i]);
+        }
+      }
+      
+      response.data = processedLines.join('\n');
+      return response;
+    }
+    
+    // Otherwise, make a second request with responseType: 'blob'
+    const blobResponse = await axios.post(
+      `${getBaseURL()}/generate-combined-srt`,
+      { 
+        audio_paths: paths,
+        paragraph_data: paragraphData  // Pass paragraph data if available
+      },
       {
         headers: {
           'Content-Type': 'application/json',
         },
-        responseType: 'blob',
+        responseType: 'blob'
       }
     );
-    return response;
+    
+    // For blob responses, we need to handle them separately
+    // Since we can't easily modify a blob here, we'll need to convert it, process it, and convert back
+    const blob = blobResponse.data;
+    if (blob instanceof Blob) {
+      const text = await blob.text();
+      const lines = text.split('\n');
+      let subtitleNumber = 1;
+      const processedLines = [];
+      
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].trim() === 'None') {
+          processedLines.push(String(subtitleNumber));
+          subtitleNumber++;
+        } else {
+          processedLines.push(lines[i]);
+        }
+      }
+      
+      const processedText = processedLines.join('\n');
+      const processedBlob = new Blob([processedText], { type: 'text/plain' });
+      blobResponse.data = processedBlob;
+    }
+    
+    return blobResponse;
   } catch (error) {
     console.error('Error generating SRT:', error);
+    console.error('Error response:', error.response);
+    throw new Error(error.response?.data?.detail || 'Failed to generate SRT');
+  }
+};
+
+export const downloadSRTContent = (content, filename = 'combined.srt') => {
+  try {
+    let blob;
+    
+    // If content is already a Blob or File
+    if (content instanceof Blob) {
+      blob = content;
+    } 
+    // If content is a string
+    else if (typeof content === 'string') {
+      blob = new Blob([content], { type: 'text/plain' });
+    } 
+    // If content is likely JSON or another format
+    else {
+      // Try to stringify if it's an object
+      const textContent = typeof content === 'object' ? JSON.stringify(content) : String(content);
+      blob = new Blob([textContent], { type: 'text/plain' });
+    }
+    
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    
+    // Clean up
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 100);
+    
+    return true;
+  } catch (error) {
+    console.error('Error downloading SRT content:', error);
+    return false;
+  }
+};
+
+export const generateSRT = async (audioPath) => {
+  try {
+    const response = await axios.post(
+      `${getBaseURL()}/generate-srt`,
+      { audioPath },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      }
+    );
+    
+    if (typeof response.data === 'string' || response.headers['content-type']?.includes('text/plain')) {
+      return response;
+    }
+    
+    return await axios.post(
+      `${getBaseURL()}/generate-srt`,
+      { audioPath },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        responseType: 'blob'
+      }
+    );
+  } catch (error) {
+    console.error('Error generating single SRT:', error);
     throw new Error(error.response?.data?.detail || 'Failed to generate SRT');
   }
 };
 
 export const generateAllSRT = async (paths) => {
-    try {
-        const response = await axios.post(`${getBaseURL()}/generate-all-srt`, 
-            { paths },
-            { responseType: 'blob' }
-        );
-        return response.data;
-    } catch (error) {
-        throw handleApiError(error);
+  try {
+    const response = await axios.post(
+      `${getBaseURL()}/generate-all-srt`,
+      { paths },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      }
+    );
+    
+    if (typeof response.data === 'string' || response.headers['content-type']?.includes('text/plain')) {
+      return response;
     }
+    
+    return await axios.post(
+      `${getBaseURL()}/generate-all-srt`,
+      { paths },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        responseType: 'blob'
+      }
+    );
+  } catch (error) {
+    console.error('Error generating multiple SRTs:', error);
+    throw new Error(error.response?.data?.detail || 'Failed to generate SRTs');
+  }
 };
 
 const handleApiError = (error) => {

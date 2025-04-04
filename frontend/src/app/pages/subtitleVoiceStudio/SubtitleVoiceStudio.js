@@ -2,301 +2,146 @@ import React, { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import SubtitleEditor from "../../components/subtitle/SubtitleEditor";
 import FileUploadSection from "../../components/fileUpload/FileUploadSection";
-import TextSegmentForm from "../../components/textSegment/TextSegmentForm";
-import {
-  audioService,
-  combineAudioSegments,
-  generateCombinedSRT,
-} from "../../services/api";
-import {
-  createDownloadLink,
-  validateAudioFile,
-} from "../../services/audioProcessing";
 import "./SubtitleVoiceStudio.css";
 
 function SubtitleVoiceStudio() {
   const navigate = useNavigate();
-  const [subtitleText, setSubtitleText] = useState("");
   const [regexPath, setRegexPath] = useState("([，、.「」？；：！])");
   const [dllitems, setDllitems] = useState("⌊ ⌉");
-  const [step, setStep] = useState(1);
-
-  const [segments, setSegments] = useState([{ text: "", duration: null }]);
-  const [refText, setRefText] = useState("");
-  const [audioFile, setAudioFile] = useState(null);
-  const [currentSegmentPaths, setCurrentSegmentPaths] = useState([]);
-  const [showTiming, setShowTiming] = useState(false);
-  const [error, setError] = useState("");
-  const [finalAudioUrl, setFinalAudioUrl] = useState(null);
-  const [isGenerating, setIsGenerating] = useState(false);
-
-  // Add this state to track generation completion
-  const [isGenerationComplete, setIsGenerationComplete] = useState(false);
-  const [generatedData, setGeneratedData] = useState(null);
-
-  const handleAddSegment = () => {
-    setSegments([...segments, { text: "", duration: null }]);
-  };
-
-  const handleRemoveSegment = (index) => {
-    const newSegments = segments.filter((_, i) => i !== index);
-    setSegments(newSegments);
-  };
-
-  const handleSegmentChange = (index, value) => {
-    const newSegments = [...segments];
-    newSegments[index].text = value;
-    setSegments(newSegments);
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError("");
-    setIsGenerating(true); // Start generating
-    try {
-      const paths = [];
-      for (let i = 0; i < segments.length; i++) {
-        const formData = new FormData();
-        formData.append("ref_text", refText);
-        formData.append("gen_text", segments[i].text);
-        formData.append("ref_audio", audioFile);
-        formData.append("segment_index", i.toString());
-
-        const result = await audioService.generateAudio(formData);
-        console.log("Generated audio path:", result.full_path);
-        paths.push(result.full_path);
-      }
-
-      console.log("Paths to combine:", paths);
-
-      if (paths.length > 0) {
-        const combinedResult = await combineAudioSegments(paths);
-        setCurrentSegmentPaths([...paths]);
-        setFinalAudioUrl(combinedResult.path); // Just use the relative path
-      }
-    } catch (error) {
-      console.error("Error in handleSubmit:", error);
-      setError(error.message || "An error occurred");
-    } finally {
-      setIsGenerating(false); // End generating
-    }
-  };
-
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (!validateAudioFile(file)) {
-      setError("Please upload a valid WAV file");
-      return;
-    }
-    setAudioFile(file);
-  };
-
-  const downloadCombinedSRT = async () => {
-    try {
-      if (!currentSegmentPaths || currentSegmentPaths.length === 0) {
-        setError("No audio segments available for SRT generation");
-        return;
-      }
-
-      console.log("Generating SRT for paths:", currentSegmentPaths);
-
-      const response = await generateCombinedSRT(currentSegmentPaths);
-
-      if (response && response.data) {
-        const srtBlob = new Blob([response.data], { type: "text/plain" });
-        createDownloadLink(srtBlob, "combined.srt");
-      } else {
-        throw new Error("Invalid response from server");
-      }
-    } catch (err) {
-      console.error("SRT download error:", err);
-      setError("Failed to download SRT: " + (err.message || "Unknown error"));
-    }
-  };
-
-  const parseSrtContent = (srtContent) => {
-    const regex =
-      /(\d+)\r?\n(\d{2}:\d{2}:\d{2},\d{3}) --> (\d{2}:\d{2}:\d{2},\d{3})\r?\n([\s\S]*?)(?:\r?\n\r?\n|$)/g;
-
-    let parsedText = "";
-    let match;
-
-    // Extract all subtitle text entries
-    while ((match = regex.exec(srtContent)) !== null) {
-      const subtitleText = match[4].trim();
-      parsedText += subtitleText + "\n\n";
-    }
-
-    return parsedText.trim();
-  };
-
-  const handleFileUpload = (event) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        if (e.target && typeof e.target.result === "string") {
-          if (file.name.endsWith(".srt")) {
-            const parsedText = parseSrtContent(e.target.result);
-            setSubtitleText(parsedText);
-          } else {
-            setSubtitleText(e.target.result);
-          }
-        }
-      };
-      reader.readAsText(file);
-    }
-  };
+  const [editorState, setEditorState] = useState({
+    subtitles: [{ id: Date.now().toString(), text: "", image: null }],
+    isGenerating: false,
+    isGenerationComplete: false,
+    generatedData: null
+  });
 
   const handleSplitText = useCallback(() => {
     try {
       const regex = new RegExp(regexPath, "g");
-      const updatedSubtitles = subtitleText.replace(regex, "$1\n\n");
-      setSubtitleText(updatedSubtitles);
+      const updatedSubtitles = editorState.subtitles.map((subtitle) => ({
+        ...subtitle,
+        text: subtitle.text.replace(regex, "$1\n\n")
+      }));
+      setEditorState((prev) => ({ ...prev, subtitles: updatedSubtitles }));
     } catch (error) {
       console.error("Regex Error:", error);
       alert("Invalid Regex pattern. Please check again!");
     }
-  }, [regexPath, subtitleText]);
+  }, [regexPath, editorState.subtitles]);
 
   const handleDeleteSpecialChars = useCallback(() => {
-    const updatedText = subtitleText.replace(
-      new RegExp(`[${dllitems.replace(/\s/g, "")}]`, "g"),
-      ""
-    );
-    setSubtitleText(updatedText);
-  }, [dllitems, subtitleText]);
+    const updatedSubtitles = editorState.subtitles.map((subtitle) => ({
+      ...subtitle,
+      text: subtitle.text.replace(
+        new RegExp(`[${dllitems.replace(/\s/g, "")}]`, "g"),
+        ""
+      )
+    }));
+    setEditorState((prev) => ({ ...prev, subtitles: updatedSubtitles }));
+  }, [dllitems, editorState.subtitles]);
 
-  const nextStep = () => {
-    if (step < 2) {
-      document.querySelector(".paper").classList.add("slide-out-left");
-      setTimeout(() => {
-        setStep(step + 1);
-        document.querySelector(".paper").classList.remove("slide-out-left");
-        document.querySelector(".paper").classList.add("slide-in-right");
-      }, 300);
+  const parseSrtContent = useCallback((content) => {
+    const regex = /(\d+)\r?\n(\d{2}:\d{2}:\d{2}[,\.]\d{3}) *--> *(\d{2}:\d{2}:\d{2}[,\.]\d{3})[\r\n]+([\s\S]*?)(?=[\r\n]+\d+[\r\n]+\d{2}:\d{2}:\d{2}[,\.]\d{3} *--> *\d{2}:\d{2}:\d{2}[,\.]\d{3}|$)/g;
+    const subtitles = [];
+    let match;
+
+    while ((match = regex.exec(content)) !== null) {
+      subtitles.push({
+        id: Date.now() + '-' + match[1],
+        text: match[4].trim()
+          .replace(/<[^>]*>/g, '')
+          .replace(/\r\n|\r|\n/g, ' ')
+          .trim(),
+        image: null
+      });
     }
-  };
 
-  const prevStep = () => {
-    if (step > 1) {
-      document.querySelector(".paper").classList.add("slide-out-right");
-      setTimeout(() => {
-        setStep(step - 1);
-        document.querySelector(".paper").classList.remove("slide-out-right");
-        document.querySelector(".paper").classList.add("slide-in-left");
-      }, 300);
-    }
-  };
+    return subtitles;
+  }, []);
 
-  // Add the handler for generation completion
+  const handleFileUpload = useCallback((event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    console.log("File selected:", file.name, file.type, file.size, "bytes");
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      if (e.target && typeof e.target.result === "string") {
+        let content = e.target.result;
+        
+        if (file.name.endsWith(".srt")) {
+          console.log("Processing as SRT file");
+          const parsedSubtitles = parseSrtContent(content);
+          setEditorState(prev => ({
+            ...prev,
+            subtitles: parsedSubtitles
+          }));
+        }
+      }
+    };
+
+    reader.onerror = (error) => {
+      console.error("File reading error:", error);
+      alert("Error reading file: " + error);
+    };
+
+    reader.readAsText(file);
+  }, [parseSrtContent]);
+
   const handleGenerationComplete = (data) => {
-    setIsGenerationComplete(true);
-    setGeneratedData(data);
+    setEditorState((prev) => ({
+      ...prev,
+      isGenerationComplete: true,
+      generatedData: data
+    }));
   };
 
-  // Update the handleSave function
   const handleSave = () => {
-    if (!generatedData?.audioUrl) {
+    if (!editorState.generatedData?.audioUrl) {
       return;
     }
 
-    // Create a new video entry
     const newVideo = {
       id: `VID${Date.now()}`,
-      title: subtitleText.slice(0, 30) + "...", // First 30 chars as title
+      title: editorState.subtitles[0]?.text.slice(0, 30) + "...",
       status: "completed",
       createdAt: new Date().toISOString(),
-      url: generatedData.audioUrl,
+      url: editorState.generatedData.audioUrl,
     };
 
-    // Here you would typically save to your backend
-    // For now, we'll just navigate to the video list
     navigate("/video-list");
   };
 
   return (
     <div className="container">
-      <h2 className="text-center mt-4">Chỉnh sửa nội dung Subtitle</h2>
-      <div className="toolbar">
-        <label>
-          <i
-            className={`bi ${
-              step === 1 ? "bi-1-circle-fill" : "bi-check-circle-fill"
-            } me-2 text-primary`}
-          ></i>
-          Chia đoạn văn bản
-        </label>
-        <hr />
-        <i
-          className={`bi bi-2-circle-fill me-2  ${
-            step === 1 ? "text-secondary" : "text-primary"
-          }`}
-        ></i>
-        Chọn hình ảnh - Video
+      <div className="paper">
+        <FileUploadSection
+          regexPath={regexPath}
+          dllitems={dllitems}
+          onRegexChange={setRegexPath}
+          onDllitemsChange={setDllitems}
+          onSplitText={handleSplitText}
+          onDeleteSpecialChars={handleDeleteSpecialChars}
+          onFileUpload={handleFileUpload}
+        />
+        
+        <SubtitleEditor 
+          subtitleSegments={editorState.subtitles}
+          setIsProcessing={(isProcessing) => setEditorState((prev) => ({ ...prev, isGenerating: isProcessing }))}
+          onGenerationComplete={handleGenerationComplete}
+        />
+        
+        <div className="buttonContainer mt-3">
+          <button 
+            className="btn btn-success"
+            onClick={handleSave}
+            disabled={!editorState.isGenerationComplete}
+          >
+            Save and Continue
+          </button>
+        </div>
       </div>
-      <hr className="line" />
-
-      {/* File Upload Step */}
-      {step === 1 && (
-        <div className="paper">
-          <FileUploadSection
-            regexPath={regexPath}
-            dllitems={dllitems}
-            onRegexChange={setRegexPath}
-            onDllitemsChange={setDllitems}
-            onSplitText={handleSplitText}
-            onDeleteSpecialChars={handleDeleteSpecialChars}
-            onFileUpload={handleFileUpload}
-          />
-
-          <TextSegmentForm
-            segments={segments}
-            refText={refText}
-            showTiming={showTiming}
-            onRefTextChange={setRefText}
-            onSegmentChange={handleSegmentChange}
-            onRemoveSegment={handleRemoveSegment}
-            onAddSegment={handleAddSegment}
-            onShowTimingToggle={() => setShowTiming(!showTiming)}
-            onSubmit={handleSubmit}
-          />
-
-          <div className="buttonContainer">
-            <button className="button btn btn-primary" onClick={nextStep}>
-              Tiếp theo
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Subtitle Editor Step */}
-      {step === 2 && (
-        <div className="paper">
-          <SubtitleEditor 
-            subtitleText={subtitleText} 
-            setIsProcessing={setIsGenerating}
-            initialRefText={refText}
-            onGenerationComplete={handleGenerationComplete}
-          />
-          <div className="buttonContainer">
-            <button
-              className="button btn btn-danger me-4"
-              onClick={prevStep}
-              disabled={isGenerating}
-            >
-              Back
-            </button>
-            <button
-              className="button btn btn-success"
-              onClick={handleSave}
-              disabled={isGenerating || !isGenerationComplete}
-            >
-              Lưu
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

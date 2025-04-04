@@ -7,7 +7,6 @@ import VideoListPage from "./pages/videoList/VideoListPage";
 import ImportText from './pages/importText/ImportText';
 import ApiConfig from './components/common/ApiConfig/ApiConfig';
 
-
 function App() {
   return (
     <VideoProvider>

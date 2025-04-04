@@ -1,3 +1,5 @@
+// This should be updated in frontend/src/app/pages/importText/ImportText.js
+
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import SubtitleEditor from "../../components/subtitle/SubtitleEditor";
@@ -8,7 +10,6 @@ const ImportText = () => {
   const [subtitleText, setSubtitleText] = useState("");
   const [regexPath, setRegexPath] = useState("([，、.「」？；：！])");
   const [dllitems, setDllitems] = useState("⌊ ⌉");
-  const [step, setStep] = useState(1);
   const [isGenerationComplete, setIsGenerationComplete] = useState(false);
   const [generatedData, setGeneratedData] = useState(null);
 
@@ -65,28 +66,6 @@ const ImportText = () => {
     }
   };
 
-  const nextStep = () => {
-    if (step < 2) {
-      document.querySelector(".paper").classList.add("slide-out-left");
-      setTimeout(() => {
-        setStep(step + 1);
-        document.querySelector(".paper").classList.remove("slide-out-left");
-        document.querySelector(".paper").classList.add("slide-in-right");
-      }, 300);
-    }
-  };
-
-  const prevStep = () => {
-    if (step > 1) {
-      document.querySelector(".paper").classList.add("slide-out-right");
-      setTimeout(() => {
-        setStep(step - 1);
-        document.querySelector(".paper").classList.remove("slide-out-right");
-        document.querySelector(".paper").classList.add("slide-in-left");
-      }, 300);
-    }
-  };
-
   const handleGenerationComplete = (data) => {
     setIsGenerationComplete(true);
     setGeneratedData(data);
@@ -109,114 +88,83 @@ const ImportText = () => {
 
   return (
     <div className="container">
-      <h2 className="text-center mt-4">Chỉnh sửa nội dung Subtitle</h2>
-      <div className="toolbar">
-        <label>
-          <i
-            className={`bi ${
-              step === 1 ? "bi-1-circle-fill" : "bi-check-circle-fill"
-            } me-2 text-primary`}
-          ></i>
-          Chia đoạn văn bản
-        </label>
-        <hr />
-        <i
-          className={`bi bi-2-circle-fill me-2  ${
-            step === 1 ? "text-secondary" : "text-primary"
-          }`}
-        ></i>
-        Chọn hình ảnh - Video
-      </div>
-      <hr className="line" />
-
-      {/* File Upload Step */}
-      {step === 1 && (
-        <div className="paper">
-          <div className="formRegex">
-            <label>Regex chia dòng:</label>
-            <input
-              type="text"
-              className="regexInput"
-              placeholder="Enter regex"
-              value={regexPath}
-              onChange={(e) => setRegexPath(e.target.value)}
-            />
-            <button
-              className="button btn btn-primary"
-              onClick={splitTextByRegex}
-            >
-              Chia
-            </button>
-          </div>
-          <div className="deleteSpecialChars">
-            <label>Xóa ký tự đặc biệt:</label>
-            <input
-              type="text"
-              className="deleteSpecialCharsInput"
-              placeholder="Nhập ký tự cần xóa"
-              value={dllitems}
-              onChange={(e) => setDllitems(e.target.value)}
-            />
-            <button
-              className="button btn btn-danger"
-              onClick={deleteSpecialCharacter}
-            >
-              Xóa
-            </button>
-          </div>
+      {/* Removed the title */}
+      
+      {/* Removed the navigation toolbar since we're merging sections */}
+      
+      <div className="paper">
+        {/* File upload and text processing section */}
+        <div className="formRegex">
+          <label>Regex chia dòng:</label>
           <input
-            className="mt-1"
-            type="file"
-            accept=".srt,.ass"
-            onChange={handleFileUpload}
-            id="file-upload"
-            style={{ display: "none" }}
+            type="text"
+            className="regexInput"
+            placeholder="Enter regex"
+            value={regexPath}
+            onChange={(e) => setRegexPath(e.target.value)}
           />
-          <label htmlFor="file-upload" className="button btn btn-info">
-            Chọn file (.srt, .ass)
-          </label>
-          <textarea
-            className="textarea"
-            placeholder="File content will appear here..."
-            value={subtitleText}
-            onChange={(e) => setSubtitleText(e.target.value)}
-          />
-          <p className="length">
-            Kí tự: {subtitleText.length} — Dòng:{" "}
-            {subtitleText.split("\n").length}
-          </p>
-          <div className="buttonContainer">
-            <button className="button btn btn-primary" onClick={nextStep}>
-              Tiếp theo
-            </button>
-          </div>
+          <button
+            className="button btn btn-primary"
+            onClick={splitTextByRegex}
+          >
+            Chia
+          </button>
         </div>
-      )}
-
-      {/* Subtitle Editor Step */}
-      {step === 2 && (
-        <div className="paper">
-          <SubtitleEditor 
-            subtitleText={subtitleText} 
-            onGenerationComplete={handleGenerationComplete}
+        <div className="deleteSpecialChars">
+          <label>Xóa ký tự đặc biệt:</label>
+          <input
+            type="text"
+            className="deleteSpecialCharsInput"
+            placeholder="Nhập ký tự cần xóa"
+            value={dllitems}
+            onChange={(e) => setDllitems(e.target.value)}
           />
-          <div className="buttonContainer mt-3">
-            <button 
-              className="btn btn-danger me-4" 
-              onClick={prevStep}
-            >
-              Quay lại
-            </button>
-            <button 
-              className="btn btn-success"
-              onClick={handleSave}
-              disabled={!isGenerationComplete}
-            >
-              Lưu và tiếp tục
-            </button>
-          </div>
+          <button
+            className="button btn btn-danger"
+            onClick={deleteSpecialCharacter}
+          >
+            Xóa
+          </button>
         </div>
-      )}
+        <input
+          className="mt-1"
+          type="file"
+          accept=".srt,.ass"
+          onChange={handleFileUpload}
+          id="file-upload"
+          style={{ display: "none" }}
+        />
+        <label htmlFor="file-upload" className="button btn btn-info">
+          Chọn file (.srt, .ass)
+        </label>
+        <textarea
+          className="textarea"
+          placeholder="File content will appear here..."
+          value={subtitleText}
+          onChange={(e) => setSubtitleText(e.target.value)}
+        />
+        <p className="length">
+          Kí tự: {subtitleText.length} — Dòng:{" "}
+          {subtitleText.split("\n").length}
+        </p>
+        
+        {/* Subtitle Editor for image selection and TTS generation */}
+        <SubtitleEditor 
+          subtitleText={subtitleText} 
+          setIsProcessing={(isProcessing) => {}}
+          onGenerationComplete={handleGenerationComplete}
+        />
+        
+        <div className="buttonContainer mt-3">
+          <button 
+            className="btn btn-success"
+            onClick={handleSave}
+            disabled={!isGenerationComplete}
+          >
+            Lưu và tiếp tục
+          </button>
+        </div>
+      </div>
     </div>
   );
 };

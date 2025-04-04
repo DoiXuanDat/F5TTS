@@ -137,8 +137,8 @@ const VideoListPage = () => {
             <thead>
               <tr>
                 <th>Video</th>
-                <th>Trạng thái</th>
                 <th>TTS Provider</th>
+                <th>Trạng Thái</th>
                 <th>ID</th>
                 <th>Ngày tạo</th>
               </tr>

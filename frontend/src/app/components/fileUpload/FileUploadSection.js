@@ -11,7 +11,7 @@ const FileUploadSection = ({
   onFileUpload,
 }) => {
   return (
-    <>
+    <div className="file-upload-section">
       <div className="formRegex">
         <label>Regex chia dòng:</label>
         <input
@@ -34,10 +34,7 @@ const FileUploadSection = ({
           value={dllitems}
           onChange={(e) => onDllitemsChange(e.target.value)}
         />
-        <button
-          className="button btn btn-danger"
-          onClick={onDeleteSpecialChars}
-        >
+        <button className="button btn btn-danger" onClick={onDeleteSpecialChars}>
           Xóa
         </button>
       </div>
@@ -52,7 +49,7 @@ const FileUploadSection = ({
       <label htmlFor="file-upload" className="button btn btn-info">
         Chọn file (.srt, .ass)
       </label>
-    </>
+    </div>
   );
 };
 
