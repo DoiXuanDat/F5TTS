@@ -74,8 +74,9 @@ yarn-error.log*
 *.yaml
 *.zip
 *.png
-*.env
+
 *.exe
 .env
 cloudflared.exe
 kokoro-tts
+*.env
