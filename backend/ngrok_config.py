@@ -51,7 +51,7 @@ class NgrokManager:
             
             # Create tunnels with HTTPS
             self.tunnels = {
-                'backend': ngrok.connect(5000, bind_tls=True).public_url,
+                'backend': ngrok.connect(8000, bind_tls=True).public_url,
                 'frontend': ngrok.connect(3000, bind_tls=True).public_url
             }
             

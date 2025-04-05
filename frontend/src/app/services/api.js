@@ -2,7 +2,9 @@ import axios from 'axios';
 
 export const BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000';
 
-export const getBaseURL = () => BASE_URL;
+export const getBaseURL = () => {
+  return '';
+};
 
 // Tạo phiên bản axios duy nhất
 const apiClient = axios.create({

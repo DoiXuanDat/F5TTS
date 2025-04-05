@@ -505,7 +505,6 @@ const SubtitleEditor = ({
       <div className="result">
         <h2>Generated Audio</h2>
         <div className="combined-audio">
-          <h3>Combined Audio</h3>
           <AudioControls audioUrl={audioState.finalAudioUrl} />
         </div>
         

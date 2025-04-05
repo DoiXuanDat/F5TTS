@@ -11,6 +11,3 @@ def setup_middleware(app):
         expose_headers=["Content-Disposition"]
     )
     return app
-
-# Export the setup_middleware function
-__all__ = ['setup_middleware']

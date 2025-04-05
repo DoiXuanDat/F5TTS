@@ -4,11 +4,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pathlib import Path
 from starlette.responses import RedirectResponse
+import json
 
 from config import AUDIO_DIR
 from api.middleware import setup_middleware
-from api.routes import audio, video, srt, kokoro  # Add kokoro import
+from api.routes import audio, video, srt, kokoro, transcription  # Add transcription import
 from services.video_service import video_storage
+from ngrok_config import NgrokManager
 
 # Configure custom logging format
 logging.basicConfig(
@@ -41,7 +43,8 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 app.include_router(audio.router, tags=["Audio Generation"])
 app.include_router(video.router, tags=["Video Management"])
 app.include_router(srt.router, tags=["SRT Generation"])
-app.include_router(kokoro.router, tags=["Kokoro TTS"])  # Add kokoro router
+app.include_router(kokoro.router, tags=["Kokoro TTS"])
+app.include_router(transcription.router, tags=["Audio Transcription"])  # Add transcription router
 
 # Initialize video storage
 video_storage.load_videos()
@@ -62,7 +65,8 @@ async def root():
             "combine_audio": "/combine-audio",
             "video_management": "/videos/",
             "srt_generation": "/generate-combined-srt",
-            "kokoro_tts": "/generate-audio-kokoro/"
+            "kokoro_tts": "/generate-audio-kokoro/",
+            "transcription": "/transcribe-audio/"  # Add transcription endpoint
         }
     }
 
@@ -79,14 +83,21 @@ async def serve_frontend(full_path: str):
         return FileResponse(index_path)
     else:
         raise HTTPException(status_code=404, detail="Frontend not found")
+    
 
 if __name__ == "__main__":
     import uvicorn
+    
+    # Khởi động ngrok và lấy URL công khai
+    ngrok_manager = NgrokManager()
+    public_url = ngrok_manager.start(port=8000)
+    print(f"\n🌐 Your app is publicly accessible at: {public_url}")
+    
     uvicorn.run(
         "server:app",
-        host="0.0.0.0",  # Listen on all interfaces
+        host="0.0.0.0",
         port=8000,
         reload=True,
         access_log=True,
-        log_config=None  # Use our custom logging config
+        log_config=None
     )
