@@ -14,7 +14,6 @@ function App() {
         <div className="App">
           <nav className="navigation">
             <a href="/">Studio</a>
-            <a href="/import-text">Import Text</a>
             <a href="/video-list">Videos</a>
           </nav>
           

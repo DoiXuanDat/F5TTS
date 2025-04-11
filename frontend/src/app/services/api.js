@@ -1,26 +1,40 @@
+// frontend/src/app/services/api.js
 import axios from 'axios';
 
+// Default fallback URL if no configuration is found
 export const BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000';
 
 export const getBaseURL = () => {
-  return '';
+  // Priority 1: Use the stored API URL from localStorage
+  const storedUrl = localStorage.getItem('api_base_url');
+  if (storedUrl) {
+    return storedUrl;
+  }
+
+  // Priority 2: Auto-detect from current URL (Important for ngrok)
+  const currentUrl = window.location.origin;
+  if (currentUrl.includes('ngrok')) {
+    return currentUrl;
+  }
+
+  // Fallback to default
+  return 'http://localhost:8000';
 };
 
-// Tạo phiên bản axios duy nhất
+// Create a single axios instance
 const apiClient = axios.create({
-  baseURL: getBaseURL(),
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Cập nhật baseURL nếu được lưu trữ trong localStorage
+// Update baseURL on every request to ensure it's always current
 apiClient.interceptors.request.use(config => {
   config.baseURL = getBaseURL();
   return config;
 });
 
-// Các hàm dịch vụ video
+// Video service functions
 export const videoService = {
   getAllVideos: async () => {
     try {
@@ -52,10 +66,10 @@ export const videoService = {
   }
 };
 
-// Các hàm dịch vụ âm thanh
+// Audio service functions
 export const audioService = {
   generateAudio: async (formData) => {
-    const response = await axios.post(`${BASE_URL}/generate-audio/`, formData);
+    const response = await axios.post(`${getBaseURL()}/generate-audio/`, formData);
     return response.data;
   },
   
@@ -80,7 +94,6 @@ export const audioService = {
   }
 };
 
-
 export default apiClient;
 
 export const combineAudioSegments = async (paths) => {
@@ -96,7 +109,6 @@ export const combineAudioSegments = async (paths) => {
       }
     );
     
-    // Ghi nhật ký phản hồi để gỡ lỗi
     console.log('Combine audio response:', response.data);
     return response.data;
   } catch (error) {
@@ -113,21 +125,19 @@ export const generateCombinedSRT = async (paths, paragraphData = []) => {
       `${getBaseURL()}/generate-combined-srt`,
       { 
         audio_paths: paths,
-        paragraph_data: paragraphData  // Pass paragraph data if available
+        paragraph_data: paragraphData
       },
       {
         headers: {
           'Content-Type': 'application/json',
         }
-        // Note: Don't set responseType to 'blob' initially to check the actual response
       }
     );
     
-    // Log the response to debug
     console.log('SRT generation response type:', typeof response.data);
     console.log('SRT generation content-type:', response.headers['content-type']);
     
-    // If the response is already text, we can process it here to add sequence numbers
+    // If the response is already text, we can process it here
     if (typeof response.data === 'string') {
       // Replace "None" with sequential numbers
       const lines = response.data.split('\n');
@@ -152,7 +162,7 @@ export const generateCombinedSRT = async (paths, paragraphData = []) => {
       `${getBaseURL()}/generate-combined-srt`,
       { 
         audio_paths: paths,
-        paragraph_data: paragraphData  // Pass paragraph data if available
+        paragraph_data: paragraphData
       },
       {
         headers: {
@@ -162,8 +172,6 @@ export const generateCombinedSRT = async (paths, paragraphData = []) => {
       }
     );
     
-    // For blob responses, we need to handle them separately
-    // Since we can't easily modify a blob here, we'll need to convert it, process it, and convert back
     const blob = blobResponse.data;
     if (blob instanceof Blob) {
       const text = await blob.text();

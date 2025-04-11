@@ -14,13 +14,22 @@ const VideoListPage = () => {
 
   const fetchVideos = async () => {
     try {
+      console.log('Fetching videos from:', `${getBaseURL()}/videos/`);
       const response = await axios.get(`${getBaseURL()}/videos/`);
+      console.log('Response data:', response.data);
+      
+      // Kiểm tra dữ liệu
       if (Array.isArray(response.data)) {
         setVideos(response.data);
+      } else {
+        console.error('Unexpected data format:', response.data);
+        setError('Dữ liệu không đúng định dạng');
       }
-      setLoading(false);
+      
     } catch (err) {
+      console.error('Error fetching videos:', err);
       setError(err.message || "Failed to fetch videos");
+    } finally {
       setLoading(false);
     }
   };

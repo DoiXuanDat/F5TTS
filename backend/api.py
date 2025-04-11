@@ -1,6 +1,6 @@
 import uuid
 from fastapi import FastAPI, Form, HTTPException
-from services.kokoro_tts_service import kokoro_tts_service
+from services.official_kokoro_tts_service import official_kokoro_tts_service
 from config import BASE_DIR, AUDIO_DIR
 import soundfile as sf
 import logging
@@ -14,7 +14,7 @@ app = FastAPI()
 @app.get("/kokoro-speakers/")
 async def get_kokoro_speakers():
     """Get list of available Kokoro TTS speakers"""
-    speakers = kokoro_tts_service.get_available_speakers()
+    speakers = official_kokoro_tts_service.get_available_speakers()
     return speakers
 
 
@@ -31,7 +31,7 @@ async def generate_audio_kokoro(
             raise ValueError("Text cannot be empty")
         
         # Generate speech with updated service method
-        audio_data, sample_rate, relative_path = kokoro_tts_service.generate_speech(
+        audio_data, sample_rate, relative_path = official_kokoro_tts_service.generate_speech(
             text=text,
             speaker_id=speaker_id,
             speed=speed

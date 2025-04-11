@@ -1,3 +1,4 @@
+// frontend/src/app/components/audio/AudioControls.js
 import React, { useState, useRef, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { getBaseURL } from '../../services/api';
@@ -34,7 +35,17 @@ const AudioControls = ({ audioUrl, label, isLoading }) => {
     if (audioUrl.startsWith('http')) {
       return audioUrl; // Nếu đã là URL đầy đủ
     }
-    return `${getBaseURL()}/${audioUrl}`; // Nếu là đường dẫn tương đối
+    
+    // Nếu URL được lưu trữ trong localStorage, sử dụng nó
+    const baseUrl = getBaseURL();
+    
+    // Nếu baseUrl không rỗng, sử dụng nó
+    if (baseUrl) {
+      return `${baseUrl}/${audioUrl}`;
+    }
+    
+    // Nếu không, sử dụng đường dẫn tương đối
+    return `/${audioUrl}`;
   };
 
   const handleDownload = async () => {

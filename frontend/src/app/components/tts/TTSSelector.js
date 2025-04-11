@@ -26,7 +26,10 @@ const TTSSelector = ({ onProviderChange, selectedProvider, disabled }) => {
       setLoading(true);
       setError(null);
       console.log('Fetching MiniMax voices...');
+      
+      // Sử dụng đường dẫn tương đối
       const response = await axios.get(`${getBaseURL()}/minimax-voices/`);
+      
       console.log('MiniMax response:', response.data);
       
       if (response.data && Array.isArray(response.data)) {
@@ -49,7 +52,10 @@ const TTSSelector = ({ onProviderChange, selectedProvider, disabled }) => {
       setLoading(true);
       setError(null);
       console.log('Fetching Kokoro speakers...');
+      
+      // Sử dụng đường dẫn tương đối
       const response = await axios.get(`${getBaseURL()}/kokoro-speakers/`);
+      
       console.log('Kokoro response:', response.data);
       
       if (response.data && Array.isArray(response.data) && response.data.length > 0) {

@@ -1,70 +1,88 @@
-from typing import Any, Dict, Optional
-import queue
-import threading
+# backend/services/queue_service.py
+from celery import Celery
+import time
+import uuid
 from datetime import datetime
 
-class QueueService:
-    def __init__(self):
-        self.task_queue = queue.Queue()
-        self.processing_queue = {}
-        self.lock = threading.Lock()
+# Khởi tạo Celery với Redis làm broker
+celery_app = Celery('tts_tasks', broker='redis://localhost:6379/0', backend='redis://localhost:6379/1')
 
-    def add_task(self, task_id: str, task_data: Dict[str, Any]) -> bool:
-        """Add a new task to the queue"""
-        try:
-            task = {
-                'id': task_id,
-                'data': task_data,
-                'status': 'pending',
-                'created_at': datetime.now(),
-                'updated_at': datetime.now()
-            }
-            self.task_queue.put(task)
-            return True
-        except Exception:
-            return False
+# Theo dõi trạng thái của các tác vụ
+task_status = {}
 
-    def get_next_task(self) -> Optional[Dict[str, Any]]:
-        """Get next task from queue"""
-        try:
-            if not self.task_queue.empty():
-                task = self.task_queue.get()
-                with self.lock:
-                    self.processing_queue[task['id']] = task
-                return task
-            return None
-        except Exception:
-            return None
+@celery_app.task
+def generate_audio_task(text, speaker_id, speed, user_id, task_id=None):
+    """Celery task để xử lý tạo audio"""
+    if not task_id:
+        task_id = str(uuid.uuid4())
+    
+    # Cập nhật trạng thái: đang xử lý
+    task_status[task_id] = {
+        'status': 'processing',
+        'progress': 0,
+        'user_id': user_id,
+        'start_time': datetime.now().isoformat(),
+        'queue_position': 0  # Không còn trong hàng đợi
+    }
+    
+    try:
+        # Mô phỏng công việc tốn thời gian
+        # Cập nhật tiến trình theo thời gian thực
+        for i in range(10):
+            time.sleep(0.5)  # Mô phỏng công việc tốn thời gian
+            task_status[task_id]['progress'] = (i + 1) * 10
+        
+        # Gọi dịch vụ TTS thực tế của bạn ở đây
+        # audio_data, sample_rate, relative_path = official_kokoro_tts_service.generate_speech(...)
+        
+        # Mô phỏng kết quả thành công
+        result = {
+            'audio_path': f'audio_{task_id}.wav',
+            'status': 'completed',
+            'duration': 10.5
+        }
+        
+        # Cập nhật trạng thái: hoàn thành
+        task_status[task_id] = {
+            'status': 'completed',
+            'progress': 100,
+            'user_id': user_id,
+            'result': result,
+            'end_time': datetime.now().isoformat()
+        }
+        
+        return result
+        
+    except Exception as e:
+        # Cập nhật trạng thái: lỗi
+        task_status[task_id] = {
+            'status': 'error',
+            'user_id': user_id,
+            'error': str(e),
+            'end_time': datetime.now().isoformat()
+        }
+        raise
 
-    def update_task_status(self, task_id: str, status: str) -> bool:
-        """Update status of a task in processing queue"""
-        try:
-            with self.lock:
-                if task_id in self.processing_queue:
-                    self.processing_queue[task_id]['status'] = status
-                    self.processing_queue[task_id]['updated_at'] = datetime.now()
-                    return True
-            return False
-        except Exception:
-            return False
+def get_queue_length():
+    """Trả về số lượng công việc đang chờ trong hàng đợi"""
+    # Kết nối với Redis để lấy độ dài hàng đợi thực tế
+    # Đây là mô phỏng
+    processing_tasks = sum(1 for status in task_status.values() if status.get('status') == 'processing')
+    return processing_tasks
 
-    def remove_task(self, task_id: str) -> bool:
-        """Remove task from processing queue"""
-        try:
-            with self.lock:
-                if task_id in self.processing_queue:
-                    del self.processing_queue[task_id]
-                    return True
-            return False
-        except Exception:
-            return False
+def get_task_status(task_id):
+    """Lấy trạng thái của một tác vụ cụ thể"""
+    return task_status.get(task_id, {'status': 'not_found'})
 
-    def get_task_status(self, task_id: str) -> Optional[str]:
-        """Get status of a specific task"""
-        try:
-            with self.lock:
-                if task_id in self.processing_queue:
-                    return self.processing_queue[task_id]['status']
-            return None
-        except Exception:
-            return None
+def get_queue_position(task_id):
+    """Ước tính vị trí trong hàng đợi của một tác vụ"""
+    if task_id not in task_status:
+        return -1
+    
+    # Đếm số tác vụ đang xử lý và đợi trước tác vụ này
+    position = 0
+    for tid, status in task_status.items():
+        if status.get('status') == 'queued' and status.get('start_time', '') < task_status[task_id].get('start_time', ''):
+            position += 1
+    
+    return position
